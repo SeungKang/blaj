@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 	"github.com/Andoryuuta/kiwi"
 	"github.com/SeungKang/speedometer/internal/appconfig"
@@ -13,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var (
@@ -36,11 +36,19 @@ func mainWithError() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse config - %w", err)
 	}
-	return fmt.Errorf("%+v", config.Games[0])
-	// Find the process from the executable name.
-	proc, err := kiwi.GetProcessByFileName("MirrorsEdge.exe")
-	if err != nil {
-		return errors.New("failed to find process")
+
+	log.Println(config.Games[0].ExeName)
+
+	var proc kiwi.Process
+	for {
+		proc, err = kiwi.GetProcessByFileName("MirrorsEdge.exe")
+		if err != nil {
+			log.Printf("failed to find process")
+		} else {
+			break
+		}
+
+		time.Sleep(5 * time.Second)
 	}
 
 	user32, err := user32util.LoadUser32DLL()
