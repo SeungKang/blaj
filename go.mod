@@ -1,4 +1,4 @@
-module github.com/SeungKang/memory-kiwi
+module github.com/SeungKang/speedometer
 
 go 1.19
 

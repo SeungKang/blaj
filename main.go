@@ -1,27 +1,25 @@
 package main
 
 import (
-	"bytes"
 	_ "embed"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/Andoryuuta/kiwi"
+	"github.com/SeungKang/speedometer/internal/appconfig"
 	"github.com/stephen-fox/user32util"
 	_ "image/png"
 	"log"
 	"math"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 )
 
 var (
-	xCoord float32
-	yCoord float32
-	zCoord float32
+	xCoord      float32
+	yCoord      float32
+	zCoord      float32
+	teleportSet = false
 )
 
 func main() {
@@ -34,6 +32,11 @@ func main() {
 }
 
 func mainWithError() error {
+	config, err := appconfig.Parse(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("failed to parse config - %w", err)
+	}
+	return fmt.Errorf("%+v", config.Games[0])
 	// Find the process from the executable name.
 	proc, err := kiwi.GetProcessByFileName("MirrorsEdge.exe")
 	if err != nil {
@@ -56,7 +59,6 @@ func mainWithError() error {
 				if err != nil {
 					log.Println(err)
 				}
-
 				xCoord, err = getFloatAtAddr(proc, xAddr)
 				if err != nil {
 					log.Println(err)
@@ -67,7 +69,6 @@ func mainWithError() error {
 				if err != nil {
 					log.Println(err)
 				}
-
 				yCoord, err = getFloatAtAddr(proc, yAddr)
 				if err != nil {
 					log.Println(err)
@@ -78,15 +79,20 @@ func mainWithError() error {
 				if err != nil {
 					log.Println(err)
 				}
-
 				zCoord, err = getFloatAtAddr(proc, zAddr)
 				if err != nil {
 					log.Println(err)
 				}
 
+				teleportSet = true
+
 				log.Printf("teleport set (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
 			// Key 5
 			case 53:
+				if teleportSet == false {
+					log.Println("teleport not set, press 4 to set teleport")
+				}
+
 				// x coord
 				xAddr, err := getAddr(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
 				if err != nil {
