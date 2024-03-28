@@ -3,7 +3,6 @@ package main
 import (
 	_ "embed"
 	"fmt"
-	"github.com/Andoryuuta/kiwi"
 	"github.com/SeungKang/speedometer/internal/appconfig"
 	"github.com/stephen-fox/user32util"
 	_ "image/png"
@@ -11,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 var (
@@ -39,20 +37,6 @@ func mainWithError() error {
 	config, err := appconfig.Parse(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("failed to parse config - %w", err)
-	}
-
-	log.Println(config.Games[0].ExeName)
-
-	var proc kiwi.Process
-	for {
-		proc, err = kiwi.GetProcessByFileName("MirrorsEdge.exe")
-		if err != nil {
-			log.Printf("failed to find process")
-		} else {
-			break
-		}
-
-		time.Sleep(5 * time.Second)
 	}
 
 	fn := func(event user32util.LowLevelKeyboardEvent) {

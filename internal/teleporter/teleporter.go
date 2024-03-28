@@ -14,7 +14,12 @@ import (
 type GameRoutine struct {
 	Game   *appconfig.Game
 	User32 *user32util.User32DLL
+	ticker *time.Ticker
 	proc   *kiwi.Process
+	xCoord float32
+	yCoord float32
+	zCoord float32
+	telset bool
 	done   chan struct{}
 	err    error
 }
@@ -28,6 +33,9 @@ func (o *GameRoutine) Err() error {
 }
 
 func (o *GameRoutine) Start(ctx context.Context) error {
+	o.done = make(chan struct{})
+	o.ticker = time.NewTicker(5 * time.Second)
+
 	go o.loop(ctx)
 }
 
@@ -41,22 +49,35 @@ func (o *GameRoutine) loop(ctx context.Context) {
 }
 
 func (o *GameRoutine) loopWithError(ctx context.Context) error {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	defer o.ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
-			// kiwi stuff
-			// once process found ticker.Stop
-			// save process to proc field in gameroutine
+		case <-o.ticker.C:
+			err := o.handleGameStartup(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to handle game startup - %w", err)
+			}
 		case:
+			o.handleKeyboardEvent(o.User32)
 			// read keyboard inputs
 			// execute keyboard action code
 		}
 	}
+}
+
+func (o *GameRoutine) handleGameStartup(ctx context.Context) error {
+	// TODO: first check if process exists
+	proc, err := kiwi.GetProcessByFileName(o.Game.ExeName)
+	if err != nil {
+		log.Printf("failed to get process by exe name - %s", err)
+		return nil
+	}
+
+	o.proc = &proc
+	o.ticker.Stop()
 }
 
 func (o *GameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent) {
@@ -64,73 +85,73 @@ func (o *GameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent
 		return
 	}
 
-	// TODO: invert if statement
-	if event.KeyboardButtonAction() == user32util.WMKeyDown {
-		switch event.Struct.VkCode {
-		// Key 4
-		case 52:
-			//fmt.Printf("%q (%d) down\n", event.Struct.VirtualKeyCode(), event.Struct.VkCode)
-			// x coord
-			xCoord, err = getFloat(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
-			if err != nil {
-				log.Println(err)
-				return
-			}
+	if event.KeyboardButtonAction() != user32util.WMKeyDown {
+		return
+	}
 
-			// y coord
-			yCoord, err = getFloat(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			// z coord
-			zCoord, err = getFloat(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			teleportSet = true
-
-			log.Printf("teleport set  (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
-		// Key 5
-		case 53:
-			if teleportSet == false {
-				log.Println("teleport not set, press 4 to set teleport")
-				return
-			}
-
-			// x coord
-			xAddr, err := getAddr(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			// y coord
-			yAddr, err := getAddr(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			// z coord
-			zAddr, err := getAddr(proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			err = proc.WriteFloat32(uintptr(xAddr), xCoord)
-			err = proc.WriteFloat32(uintptr(yAddr), yCoord)
-			err = proc.WriteFloat32(uintptr(zAddr), zCoord)
-			log.Printf("teleported to (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
+	switch event.Struct.VkCode {
+	// Key 4
+	case 52:
+		// x coord
+		xCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
+		if err != nil {
+			log.Println(err)
+			return
 		}
+
+		// y coord
+		yCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		// z coord
+		zCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		teleportSet = true
+
+		log.Printf("teleport set  (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
+	// Key 5
+	case 53:
+		if teleportSet == false {
+			log.Println("teleport not set, press 4 to set teleport")
+			return
+		}
+
+		// x coord
+		xAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		// y coord
+		yAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		// z coord
+		zAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		err = proc.WriteFloat32(uintptr(xAddr), xCoord)
+		err = proc.WriteFloat32(uintptr(yAddr), yCoord)
+		err = proc.WriteFloat32(uintptr(zAddr), zCoord)
+		log.Printf("teleported to (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
 	}
 }
 
-func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
+func getAddr(proc *kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
 	stringAddr, err := proc.ReadUint32(uintptr(start + 0x400000)) // 400000 the base address
 	if err != nil {
 		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", stringAddr, err)
@@ -150,7 +171,7 @@ func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error)
 	return stringAddr, nil
 }
 
-func getFloat(proc kiwi.Process, start uint32, offsets ...uint32) (float32, error) {
+func getFloat(proc *kiwi.Process, start uint32, offsets ...uint32) (float32, error) {
 	addr, err := getAddr(proc, start, offsets...)
 	if err != nil {
 		return 0, err
