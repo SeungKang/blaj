@@ -12,13 +12,6 @@ import (
 	"syscall"
 )
 
-var (
-	xCoord      float32
-	yCoord      float32
-	zCoord      float32
-	teleportSet = false
-)
-
 func main() {
 	log.SetFlags(0)
 
@@ -42,12 +35,6 @@ func mainWithError() error {
 	fn := func(event user32util.LowLevelKeyboardEvent) {
 
 	}
-
-	listener, err := user32util.NewLowLevelKeyboardListener(fn, user32)
-	if err != nil {
-		log.Fatalf("failed to create listener - %s", err.Error())
-	}
-	defer listener.Release()
 
 	log.Println("Speedometer started")
 

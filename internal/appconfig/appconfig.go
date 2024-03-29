@@ -63,31 +63,31 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 		return nil, fmt.Errorf("no pointers provided")
 	}
 
-	setTeleportKeybindStr, err := section.FirstParamValue("setTeleport")
+	saveStateKeybindStr, err := section.FirstParamValue("saveState")
 	if err != nil {
 		return nil, err
 	}
 
-	setTeleportKeybind, err := keybindFromStr(setTeleportKeybindStr)
+	saveStateKeybind, err := keybindFromStr(saveStateKeybindStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse keybind: %q - %w", setTeleportKeybindStr, err)
+		return nil, fmt.Errorf("failed to parse keybind: %q - %w", saveStateKeybindStr, err)
 	}
 
-	doTeleportKeybindStr, err := section.FirstParamValue("doTeleport")
+	restoreStateKeybindStr, err := section.FirstParamValue("doTeleport")
 	if err != nil {
 		return nil, err
 	}
 
-	doTeleportKeybind, err := keybindFromStr(doTeleportKeybindStr)
+	restoreStateKeybind, err := keybindFromStr(restoreStateKeybindStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse keybind: %q - %w", doTeleportKeybindStr, err)
+		return nil, fmt.Errorf("failed to parse keybind: %q - %w", restoreStateKeybindStr, err)
 	}
 
 	return &Game{
-		ExeName:     exeName,
-		Pointers:    pointers,
-		SetTeleport: setTeleportKeybind,
-		DoTeleport:  doTeleportKeybind,
+		ExeName:      exeName,
+		Pointers:     pointers,
+		SaveState:    saveStateKeybind,
+		RestoreState: restoreStateKeybind,
 	}, nil
 }
 
@@ -109,7 +109,7 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 		values = append(values, uint32(value))
 	}
 
-	return Pointer{Addrs: values}, nil
+	return Pointer{Name: param.Name, Addrs: values}, nil
 }
 
 func keybindFromStr(keybindStr string) (uint32, error) {
@@ -123,12 +123,13 @@ func keybindFromStr(keybindStr string) (uint32, error) {
 }
 
 type Game struct {
-	ExeName     string
-	Pointers    []Pointer
-	SetTeleport uint32 // support string like "w"
-	DoTeleport  uint32
+	ExeName      string
+	Pointers     []Pointer
+	SaveState    uint32 // support string like "w"
+	RestoreState uint32
 }
 
 type Pointer struct {
+	Name  string
 	Addrs []uint32
 }

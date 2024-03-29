@@ -15,11 +15,12 @@ type GameRoutine struct {
 	Game   *appconfig.Game
 	User32 *user32util.User32DLL
 	ticker *time.Ticker
-	proc   *kiwi.Process
-	xCoord float32
-	yCoord float32
-	zCoord float32
-	telset bool
+	//proc   kiwi.Process
+	//xCoord float32
+	//yCoord float32
+	//zCoord float32
+	//telset bool
+	//kbEvnt chan user32util.LowLevelKeyboardEvent
 	done   chan struct{}
 	err    error
 }
@@ -76,85 +77,106 @@ func (o *GameRoutine) handleGameStartup(ctx context.Context) error {
 		return nil
 	}
 
-	o.proc = &proc
+	gameStates := make(map[string]*gameState)
+	for _, pointer := range o.Game.Pointers {
+		gameStates[pointer.Name] = &gameState{
+			pointer:    pointer,
+		}
+	}
+
+	runningGame := newRunningGameRoutine(o.Game, proc, gameStates)
+
+	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, o.User32)
+	if err != nil {
+		log.Fatalf("failed to create listener - %s", err.Error())
+	}
+	defer listener.Release()
+
 	o.ticker.Stop()
+
+	return nil
 }
 
-func (o *GameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent) {
-	if o.proc == nil {
+func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, state map[string]*gameState) *runningGameRoutine {
+	return &runningGameRoutine{
+		game:   game,
+		proc:   proc,
+		states: state,
+		done:   make(chan struct{}),
+	}
+}
+
+type runningGameRoutine struct {
+	game *appconfig.Game
+	proc   kiwi.Process
+	states map[string]*gameState
+	kbEvnt chan user32util.LowLevelKeyboardEvent
+	done   chan struct{}
+	err    error
+}
+
+func (o *runningGameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent) {
+	if o.err != nil {
 		return
 	}
 
+	err := o.handleKeyboardEventWithError(event)
+	if err != nil {
+		o.err = err
+		close(o.done)
+	}
+}
+
+func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLevelKeyboardEvent) error {
 	if event.KeyboardButtonAction() != user32util.WMKeyDown {
-		return
+		return nil
 	}
 
 	switch event.Struct.VkCode {
-	// Key 4
-	case 52:
-		// x coord
-		xCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
-		if err != nil {
-			log.Println(err)
-			return
+	case o.game.SaveState:
+		for name, state := range o.states {
+			log.Printf("saving state %s at %+v", name, state.pointer)
+			// TODO: refactor function to just take a single slice
+			addr, err := getAddr(o.proc, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			if err != nil {
+				return err
+			}
+
+			savedState, err := o.proc.ReadUint32(uintptr(addr))
+			if err != nil {
+				return err
+			}
+
+			log.Printf("saved state %s at %+v as 0x%x", name, state.pointer, savedState)
+
+			state.savedState = savedState
+			state.stateSet = true
 		}
+	case o.game.RestoreState:
+		for name, state := range o.states {
+			if !state.stateSet {
+				continue
+			}
 
-		// y coord
-		yCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
-		if err != nil {
-			log.Println(err)
-			return
+			log.Printf("restoring state %s at %+v to 0x%x", name, state.pointer, state.savedState)
+			addr, err := getAddr(o.proc, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			if err != nil {
+				return err
+			}
+
+			err = o.proc.WriteUint32(uintptr(addr), state.savedState)
+			if err != nil {
+				return err
+			}
 		}
-
-		// z coord
-		zCoord, err = getFloat(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		teleportSet = true
-
-		log.Printf("teleport set  (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
-	// Key 5
-	case 53:
-		if teleportSet == false {
-			log.Println("teleport not set, press 4 to set teleport")
-			return
-		}
-
-		// x coord
-		xAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xE8)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		// y coord
-		yAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xEC)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		// z coord
-		zAddr, err := getAddr(o.proc, 0x01C553D0, 0xCC, 0x1CC, 0x2F8, 0xF0)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		err = proc.WriteFloat32(uintptr(xAddr), xCoord)
-		err = proc.WriteFloat32(uintptr(yAddr), yCoord)
-		err = proc.WriteFloat32(uintptr(zAddr), zCoord)
-		log.Printf("teleported to (%.2f, %.2f, %.2f)", xCoord, yCoord, zCoord)
 	}
+	return nil
 }
 
-func getAddr(proc *kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
-	stringAddr, err := proc.ReadUint32(uintptr(start + 0x400000)) // 400000 the base address
+func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
+	addr, err := proc.ReadUint32(uintptr(start + 0x400000)) // 400000 the base address
 	if err != nil {
-		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", stringAddr, err)
+		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", addr, err)
 	}
 
 	if len(offsets) == 0 {
@@ -162,16 +184,16 @@ func getAddr(proc *kiwi.Process, start uint32, offsets ...uint32) (uint32, error
 	}
 
 	for _, offset := range offsets[:len(offsets)-1] {
-		stringAddr, err = proc.ReadUint32(uintptr(stringAddr + offset))
+		addr, err = proc.ReadUint32(uintptr(addr + offset))
 		if err != nil {
-			return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", stringAddr, err)
+			return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", addr, err)
 		}
 	}
-	stringAddr += offsets[len(offsets)-1]
-	return stringAddr, nil
+	addr += offsets[len(offsets)-1]
+	return addr, nil
 }
 
-func getFloat(proc *kiwi.Process, start uint32, offsets ...uint32) (float32, error) {
+func getFloat(proc kiwi.Process, start uint32, offsets ...uint32) (float32, error) {
 	addr, err := getAddr(proc, start, offsets...)
 	if err != nil {
 		return 0, err
@@ -183,4 +205,10 @@ func getFloat(proc *kiwi.Process, start uint32, offsets ...uint32) (float32, err
 	}
 
 	return math.Float32frombits(chunk), nil
+}
+
+type gameState struct {
+	pointer appconfig.Pointer
+	stateSet bool
+	savedState uint32 // TODO: use uintpointer
 }
