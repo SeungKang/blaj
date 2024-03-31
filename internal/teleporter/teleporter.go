@@ -2,27 +2,29 @@ package teleporter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Andoryuuta/kiwi"
 	"github.com/SeungKang/speedometer/internal/appconfig"
 	"github.com/stephen-fox/user32util"
 	"log"
-	"math"
+	"sync"
 	"time"
 )
 
 type GameRoutine struct {
-	Game   *appconfig.Game
-	User32 *user32util.User32DLL
-	ticker *time.Ticker
+	Game    *appconfig.Game
+	User32  *user32util.User32DLL
+	ticker  *time.Ticker
+	current *runningGameRoutine
 	//proc   kiwi.Process
 	//xCoord float32
 	//yCoord float32
 	//zCoord float32
 	//telset bool
 	//kbEvnt chan user32util.LowLevelKeyboardEvent
-	done   chan struct{}
-	err    error
+	done chan struct{}
+	err  error
 }
 
 func (o *GameRoutine) Done() <-chan struct{} {
@@ -33,7 +35,7 @@ func (o *GameRoutine) Err() error {
 	return o.err
 }
 
-func (o *GameRoutine) Start(ctx context.Context) error {
+func (o *GameRoutine) Start(ctx context.Context) {
 	o.done = make(chan struct{})
 	o.ticker = time.NewTicker(5 * time.Second)
 
@@ -50,26 +52,31 @@ func (o *GameRoutine) loop(ctx context.Context) {
 }
 
 func (o *GameRoutine) loopWithError(ctx context.Context) error {
-	defer o.ticker.Stop()
+	defer func() {
+		o.ticker.Stop()
+		if o.current != nil {
+			o.current.Stop()
+		}
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.ticker.C:
-			err := o.handleGameStartup(ctx)
+			err := o.handleGameStartup()
 			if err != nil {
-				return fmt.Errorf("failed to handle game startup - %w", err)
+				return fmt.Errorf("failed to handle game startup for %s - %w", o.Game.ExeName, err)
 			}
-		case:
-			o.handleKeyboardEvent(o.User32)
-			// read keyboard inputs
-			// execute keyboard action code
+		case <-o.current.Done():
+			log.Printf("%s routine exited - %s", o.Game.ExeName, o.current.Err())
+			o.ticker.Reset(5 * time.Second)
+			o.current = nil
 		}
 	}
 }
 
-func (o *GameRoutine) handleGameStartup(ctx context.Context) error {
+func (o *GameRoutine) handleGameStartup() error {
 	// TODO: first check if process exists
 	proc, err := kiwi.GetProcessByFileName(o.Game.ExeName)
 	if err != nil {
@@ -77,53 +84,88 @@ func (o *GameRoutine) handleGameStartup(ctx context.Context) error {
 		return nil
 	}
 
-	gameStates := make(map[string]*gameState)
-	for _, pointer := range o.Game.Pointers {
-		gameStates[pointer.Name] = &gameState{
-			pointer:    pointer,
-		}
-	}
-
-	runningGame := newRunningGameRoutine(o.Game, proc, gameStates)
-
-	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, o.User32)
+	runningGame, err := newRunningGameRoutine(o.Game, proc, o.User32)
 	if err != nil {
-		log.Fatalf("failed to create listener - %s", err.Error())
+		return fmt.Errorf("failed to create new running game routine - %w", err)
 	}
-	defer listener.Release()
 
+	o.current = runningGame
 	o.ticker.Stop()
 
 	return nil
 }
 
-func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, state map[string]*gameState) *runningGameRoutine {
-	return &runningGameRoutine{
+func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32util.User32DLL) (*runningGameRoutine, error) {
+	gameStates := make(map[string]*gameState)
+	for _, pointer := range game.Pointers {
+		gameStates[pointer.Name] = &gameState{
+			pointer: pointer,
+		}
+	}
+
+	runningGame := &runningGameRoutine{
 		game:   game,
 		proc:   proc,
-		states: state,
+		states: gameStates,
 		done:   make(chan struct{}),
 	}
+
+	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, dll)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create listener - %s", err.Error())
+	}
+
+	go func() {
+		err := <-listener.OnDone()
+		if err == nil {
+			err = errors.New("listener exited without error")
+		}
+
+		runningGame.exited(err)
+	}()
+
+	runningGame.ln = listener
+	return runningGame, nil
 }
 
 type runningGameRoutine struct {
-	game *appconfig.Game
+	game   *appconfig.Game
 	proc   kiwi.Process
 	states map[string]*gameState
-	kbEvnt chan user32util.LowLevelKeyboardEvent
+	once   sync.Once
+	ln     *user32util.LowLevelKeyboardEventListener
 	done   chan struct{}
 	err    error
 }
 
-func (o *runningGameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent) {
-	if o.err != nil {
-		return
+func (o *runningGameRoutine) Stop() {
+	o.exited(errors.New("stopped"))
+}
+
+func (o *runningGameRoutine) Done() <-chan struct{} {
+	if o == nil {
+		return nil
 	}
 
-	err := o.handleKeyboardEventWithError(event)
-	if err != nil {
+	return o.done
+}
+
+func (o *runningGameRoutine) Err() error {
+	return o.err
+}
+
+func (o *runningGameRoutine) exited(err error) {
+	o.once.Do(func() {
+		o.ln.Release()
 		o.err = err
 		close(o.done)
+	})
+}
+
+func (o *runningGameRoutine) handleKeyboardEvent(event user32util.LowLevelKeyboardEvent) {
+	err := o.handleKeyboardEventWithError(event)
+	if err != nil {
+		o.exited(err)
 	}
 }
 
@@ -193,22 +235,8 @@ func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error)
 	return addr, nil
 }
 
-func getFloat(proc kiwi.Process, start uint32, offsets ...uint32) (float32, error) {
-	addr, err := getAddr(proc, start, offsets...)
-	if err != nil {
-		return 0, err
-	}
-
-	chunk, err := proc.ReadUint32(uintptr(addr))
-	if err != nil {
-		return 0, fmt.Errorf("failed to read memory at 0x%x - %w", addr, err)
-	}
-
-	return math.Float32frombits(chunk), nil
-}
-
 type gameState struct {
-	pointer appconfig.Pointer
-	stateSet bool
+	pointer    appconfig.Pointer
+	stateSet   bool
 	savedState uint32 // TODO: use uintpointer
 }

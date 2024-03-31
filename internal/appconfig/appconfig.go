@@ -68,12 +68,13 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 		return nil, err
 	}
 
+	// TODO: parse string to virtual keycode
 	saveStateKeybind, err := keybindFromStr(saveStateKeybindStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse keybind: %q - %w", saveStateKeybindStr, err)
 	}
 
-	restoreStateKeybindStr, err := section.FirstParamValue("doTeleport")
+	restoreStateKeybindStr, err := section.FirstParamValue("restoreState")
 	if err != nil {
 		return nil, err
 	}

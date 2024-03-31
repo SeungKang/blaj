@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"github.com/SeungKang/speedometer/internal/appconfig"
+	"github.com/SeungKang/speedometer/internal/teleporter"
 	"github.com/stephen-fox/user32util"
 	_ "image/png"
 	"log"
@@ -32,19 +34,32 @@ func mainWithError() error {
 		return fmt.Errorf("failed to parse config - %w", err)
 	}
 
-	fn := func(event user32util.LowLevelKeyboardEvent) {
+	ctx, cancelFn := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancelFn()
 
+	gameRoutinesExited := make(chan error, len(config.Games))
+	for _, game := range config.Games {
+		game := game
+
+		// TODO: write function that creates and starts game routine
+		gameRoutine := &teleporter.GameRoutine{
+			Game:   game,
+			User32: user32,
+		}
+
+		gameRoutine.Start(ctx)
+
+		go func() {
+			<-gameRoutine.Done()
+			gameRoutinesExited <- fmt.Errorf("%s exited - %w",
+				game.ExeName, gameRoutine.Err())
+		}()
 	}
 
-	log.Println("Speedometer started")
-
-	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
 	select {
-	case err := <-listener.OnDone():
-		log.Fatalf("keyboard listener stopped unexpectedly - %v", err)
-	case <-interrupts:
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-gameRoutinesExited:
+		return err
 	}
-
-	return nil
 }
