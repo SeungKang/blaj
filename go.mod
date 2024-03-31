@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/Andoryuuta/kiwi v0.0.0-20200827010936-214591e6213d
+	github.com/mitchellh/go-ps v1.0.0
 	github.com/stephen-fox/user32util v0.3.1
 )
 

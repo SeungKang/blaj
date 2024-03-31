@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/Andoryuuta/kiwi"
 	"github.com/SeungKang/speedometer/internal/appconfig"
+	"github.com/mitchellh/go-ps"
 	"github.com/stephen-fox/user32util"
 	"log"
+	"os"
 	"sync"
 	"time"
 )
@@ -58,7 +60,7 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.ticker.C:
-			err := o.handleGameStartup()
+			err := o.checkGameRunning()
 			if err != nil {
 				return fmt.Errorf("failed to handle game startup for %s - %w", o.Game.ExeName, err)
 			}
@@ -70,12 +72,30 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 	}
 }
 
-func (o *Routine) handleGameStartup() error {
-	// TODO: first check if process exists
-	proc, err := kiwi.GetProcessByFileName(o.Game.ExeName)
+func (o *Routine) checkGameRunning() error {
+	// TODO: logger to make prefix with exename
+	log.Printf("checking for game running with exe name: %s", o.Game.ExeName)
+
+	processes, err := ps.Processes()
 	if err != nil {
-		log.Printf("failed to get process by exe name - %s", err)
+		return fmt.Errorf("failed to get active processes - %w", err)
+	}
+
+	possiblePID := -1
+	for _, process := range processes {
+		if process.Executable() == o.Game.ExeName {
+			possiblePID = process.Pid()
+			break
+		}
+	}
+
+	if possiblePID == -1 {
 		return nil
+	}
+
+	proc, err := kiwi.GetProcessByPID(possiblePID)
+	if err != nil {
+		return fmt.Errorf("failed to get process by PID - %w", err)
 	}
 
 	runningGame, err := newRunningGameRoutine(o.Game, proc, o.User32)
@@ -108,6 +128,22 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 	if err != nil {
 		return nil, fmt.Errorf("failed to create listener - %s", err.Error())
 	}
+	runningGame.ln = listener
+
+	process, err := os.FindProcess(int(proc.PID))
+	if err != nil {
+		runningGame.Stop()
+		return nil, fmt.Errorf("failed to find process with PID: %d - %w", proc.PID, err)
+	}
+
+	go func() {
+		_, err := process.Wait()
+		if err == nil {
+			err = errors.New("process ended unexpectedly without error")
+		}
+
+		runningGame.exited(err)
+	}()
 
 	go func() {
 		err := <-listener.OnDone()
@@ -118,7 +154,6 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 		runningGame.exited(err)
 	}()
 
-	runningGame.ln = listener
 	return runningGame, nil
 }
 

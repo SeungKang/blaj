@@ -2,6 +2,8 @@ github.com/Andoryuuta/kiwi v0.0.0-20200827010936-214591e6213d h1:Jnu1j015U0uK8i0
 github.com/Andoryuuta/kiwi v0.0.0-20200827010936-214591e6213d/go.mod h1:mnEJPG4BErdGQtRMLZnRJK4ts2ZDgtZ0lstYBpP55+M=
 github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 h1:iQTw/8FWTuc7uiaSepXwyf3o52HaUYcV+Tu66S3F5GA=
 github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0/go.mod h1:1NbS8ALrpOvjt0rHPNLyCIeMtbizbir8U//inJ+zuB8=
+github.com/mitchellh/go-ps v1.0.0 h1:i6ampVEEF4wQFF+bkYfwYgY+F/uYJDktmvLPf7qIgjc=
+github.com/mitchellh/go-ps v1.0.0/go.mod h1:J4lOc8z8yJs6vUwklHw2XEIiT4z4C40KtWVN3nvg8Pg=
 github.com/stephen-fox/user32util v0.3.1 h1:QXaR64G8e6lRjyhvTZV6dyDapTuG/g78JlLGCkRMkxg=
 github.com/stephen-fox/user32util v0.3.1/go.mod h1:F5atFcQh+BH0YHU96Y6L2lMVCBiCTNsUYfYliyJ1JXg=
 golang.org/x/sys v0.0.0-20190530182044-ad28b68e88f1/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
