@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"github.com/SeungKang/speedometer/internal/appconfig"
-	"github.com/SeungKang/speedometer/internal/teleporter"
+	"github.com/SeungKang/speedometer/internal/gamectl"
 	"github.com/stephen-fox/user32util"
 	_ "image/png"
 	"log"
@@ -42,7 +42,7 @@ func mainWithError() error {
 		game := game
 
 		// TODO: write function that creates and starts game routine
-		gameRoutine := &teleporter.GameRoutine{
+		gameRoutine := &gamectl.Routine{
 			Game:   game,
 			User32: user32,
 		}

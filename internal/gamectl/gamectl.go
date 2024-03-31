@@ -1,4 +1,4 @@
-package teleporter
+package gamectl
 
 import (
 	"context"
@@ -12,37 +12,31 @@ import (
 	"time"
 )
 
-type GameRoutine struct {
+type Routine struct {
 	Game    *appconfig.Game
 	User32  *user32util.User32DLL
 	ticker  *time.Ticker
 	current *runningGameRoutine
-	//proc   kiwi.Process
-	//xCoord float32
-	//yCoord float32
-	//zCoord float32
-	//telset bool
-	//kbEvnt chan user32util.LowLevelKeyboardEvent
-	done chan struct{}
-	err  error
+	done    chan struct{}
+	err     error
 }
 
-func (o *GameRoutine) Done() <-chan struct{} {
+func (o *Routine) Done() <-chan struct{} {
 	return o.done
 }
 
-func (o *GameRoutine) Err() error {
+func (o *Routine) Err() error {
 	return o.err
 }
 
-func (o *GameRoutine) Start(ctx context.Context) {
+func (o *Routine) Start(ctx context.Context) {
 	o.done = make(chan struct{})
 	o.ticker = time.NewTicker(5 * time.Second)
 
 	go o.loop(ctx)
 }
 
-func (o *GameRoutine) loop(ctx context.Context) {
+func (o *Routine) loop(ctx context.Context) {
 	var cancelFn func()
 	ctx, cancelFn = context.WithCancel(ctx)
 	defer cancelFn()
@@ -51,7 +45,7 @@ func (o *GameRoutine) loop(ctx context.Context) {
 	close(o.done)
 }
 
-func (o *GameRoutine) loopWithError(ctx context.Context) error {
+func (o *Routine) loopWithError(ctx context.Context) error {
 	defer func() {
 		o.ticker.Stop()
 		if o.current != nil {
@@ -76,7 +70,7 @@ func (o *GameRoutine) loopWithError(ctx context.Context) error {
 	}
 }
 
-func (o *GameRoutine) handleGameStartup() error {
+func (o *Routine) handleGameStartup() error {
 	// TODO: first check if process exists
 	proc, err := kiwi.GetProcessByFileName(o.Game.ExeName)
 	if err != nil {
