@@ -203,7 +203,7 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 		return nil
 	}
 
-	switch event.Struct.VkCode {
+	switch event.Struct.VirtualKeyCode() {
 	case o.game.SaveState:
 		for name, state := range o.states {
 			log.Printf("saving state %s at %+v", name, state.pointer)

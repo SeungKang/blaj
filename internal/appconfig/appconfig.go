@@ -68,7 +68,6 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 		return nil, err
 	}
 
-	// TODO: parse string to virtual keycode
 	saveStateKeybind, err := keybindFromStr(saveStateKeybindStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse keybind: %q - %w", saveStateKeybindStr, err)
@@ -113,21 +112,19 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 	return Pointer{Name: param.Name, Addrs: values}, nil
 }
 
-func keybindFromStr(keybindStr string) (uint32, error) {
-	value, err := strconv.ParseUint(keybindStr, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert string to uint: %q - %w",
-			keybindStr, err)
+func keybindFromStr(keybindStr string) (byte, error) {
+	if len(keybindStr) != 1 {
+		return 0, fmt.Errorf("keybind must be 1 character")
 	}
 
-	return uint32(value), nil
+	return keybindStr[0], nil
 }
 
 type Game struct {
 	ExeName      string
 	Pointers     []Pointer
-	SaveState    uint32 // support string like "w"
-	RestoreState uint32
+	SaveState    byte
+	RestoreState byte
 }
 
 type Pointer struct {
