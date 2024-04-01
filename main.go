@@ -18,6 +18,14 @@ import (
 
 const appName = "buh"
 
+var (
+	//go:embed juul-green.ico
+	juulGreen []byte
+
+	//go:embed juul-red.ico
+	juulRed []byte
+)
+
 func main() {
 	a := &app{}
 	systray.Run(a.ready, a.exit)
@@ -30,6 +38,7 @@ type app struct {
 
 func (o *app) ready() {
 	systray.SetTitle(appName)
+	systray.SetIcon(juulGreen)
 
 	o.status = systray.AddMenuItem("Status", "Application status")
 	o.statusChild = o.status.AddSubMenuItem("", "")
@@ -63,6 +72,7 @@ func (o *app) loop(ctx context.Context) {
 		}
 
 		o.status.SetTitle("Status: running")
+		systray.SetIcon(juulGreen)
 		o.statusChild.Hide()
 
 		select {
@@ -74,6 +84,7 @@ func (o *app) loop(ctx context.Context) {
 		cancelFn()
 
 		o.status.SetTitle("Status: error")
+		systray.SetIcon(juulRed)
 		o.statusChild.SetTitle(err.Error())
 		o.statusChild.Show()
 
