@@ -273,7 +273,7 @@ func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error)
 	}
 
 	if len(offsets) == 0 {
-		return 0, fmt.Errorf("please specify 1 or more offset")
+		return addr, nil
 	}
 
 	for _, offset := range offsets[:len(offsets)-1] {
