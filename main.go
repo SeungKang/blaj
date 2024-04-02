@@ -24,6 +24,15 @@ var (
 
 	//go:embed juul-red.ico
 	juulRed []byte
+
+	//go:embed juul-red.ico
+	gameErrorIcon []byte
+
+	//go:embed juul-red.ico
+	gameNotRunningIcon []byte
+
+	//go:embed juul-green.ico
+	gameRunningIcon []byte
 )
 
 func main() {
@@ -40,11 +49,15 @@ func (o *app) ready() {
 	systray.SetTitle(appName)
 	systray.SetIcon(juulGreen)
 
+	systray.AddMenuItem(appName, "").Disable()
+	systray.AddSeparator()
 	o.status = systray.AddMenuItem("Status", "Application status")
 	o.statusChild = o.status.AddSubMenuItem("", "")
 	o.statusChild.Hide()
 
 	quit := systray.AddMenuItem("Quit", "Quit the application")
+	systray.AddSeparator()
+
 	ctx, cancelFn := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	go func() {
@@ -66,7 +79,7 @@ func (o *app) loop(ctx context.Context) {
 		ctx, cancelFn = context.WithCancel(ctx)
 		defer cancelFn()
 
-		gameErrors, err := startApp(ctx)
+		gameUIs, gameErrors, err := startApp(ctx)
 		if err != nil {
 			goto onError
 		}
@@ -92,6 +105,10 @@ func (o *app) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(5 * time.Second):
+			for _, ui := range gameUIs {
+				ui.hide()
+			}
+
 			continue
 		}
 	}
@@ -101,38 +118,88 @@ func (o *app) exit() {
 	os.Exit(0)
 }
 
-func startApp(ctx context.Context) (<-chan error, error) {
+func newGameUI(game *appconfig.Game) *gameUI {
+	gui := &gameUI{
+		// TODO: maybe use the INI header
+		runningMenu: systray.AddMenuItem(game.ExeName, ""),
+		errorMenu:   systray.AddMenuItem(game.ExeName, ":c"),
+	}
+
+	gui.runningMenu.SetIcon(gameNotRunningIcon)
+	gui.errorSubMenu = gui.errorMenu.AddSubMenuItem("", "")
+	gui.errorMenu.Hide()
+
+	return gui
+}
+
+type gameUI struct {
+	runningMenu  *systray.MenuItem
+	errorMenu    *systray.MenuItem
+	errorSubMenu *systray.MenuItem
+}
+
+func (o *gameUI) GameStarted(exename string) {
+	o.runningMenu.SetIcon(gameRunningIcon)
+	o.runningMenu.Show()
+
+	o.errorMenu.Hide()
+}
+
+func (o *gameUI) GameStopped(exename string, err error) {
+	if err != nil {
+		o.errorMenu.SetIcon(gameErrorIcon)
+		o.errorMenu.Show()
+		o.errorSubMenu.SetTitle(err.Error())
+
+		o.runningMenu.Hide()
+	} else {
+		o.runningMenu.SetIcon(gameNotRunningIcon)
+	}
+}
+
+func (o *gameUI) hide() {
+	o.runningMenu.Hide()
+	o.errorMenu.Hide()
+	o.errorSubMenu.Hide()
+}
+
+func startApp(ctx context.Context) ([]*gameUI, <-chan error, error) {
 	user32, err := user32util.LoadUser32DLL()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
+		return nil, nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user home dir - %w", err)
+		return nil, nil, fmt.Errorf("failed to get user home dir - %w", err)
 	}
 
 	configPath := filepath.Join(homeDir, "."+appName, "config.conf")
 	configFile, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open config file - %w", err)
+		return nil, nil, fmt.Errorf("failed to open config file - %w", err)
 	}
 	defer configFile.Close()
 
 	config, err := appconfig.Parse(configFile)
 	configFile.Close()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config - %w", err)
+		return nil, nil, fmt.Errorf("failed to parse config - %w", err)
 	}
 
+	gameUIs := make([]*gameUI, len(config.Games))
 	gameRoutinesExited := make(chan error, len(config.Games))
-	for _, game := range config.Games {
+
+	for i, game := range config.Games {
 		game := game
+
+		gameUIs[i] = newGameUI(game)
 
 		// TODO: write function that creates and starts game routine
 		gameRoutine := &gamectl.Routine{
 			Game:   game,
 			User32: user32,
+			Notif:  gameUIs[i],
 		}
 
 		gameRoutine.Start(ctx)
@@ -144,5 +211,5 @@ func startApp(ctx context.Context) (<-chan error, error) {
 		}()
 	}
 
-	return gameRoutinesExited, nil
+	return gameUIs, gameRoutinesExited, nil
 }

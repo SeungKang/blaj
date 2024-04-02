@@ -14,9 +14,19 @@ import (
 	"time"
 )
 
+var (
+	gameExitedNormallyErr = errors.New("game exited without error")
+)
+
+type Notifier interface {
+	GameStarted(exename string)
+	GameStopped(exename string, err error)
+}
+
 type Routine struct {
 	Game    *appconfig.Game
 	User32  *user32util.User32DLL
+	Notif   Notifier
 	ticker  *time.Ticker
 	current *runningGameRoutine
 	done    chan struct{}
@@ -67,6 +77,15 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 		case <-o.current.Done():
 			log.Printf("%s routine exited - %s", o.Game.ExeName, o.current.Err())
 			o.ticker.Reset(5 * time.Second)
+
+			if o.Notif != nil {
+				if errors.Is(o.current.Err(), gameExitedNormallyErr) {
+					o.Notif.GameStopped(o.Game.ExeName, nil)
+				} else {
+					o.Notif.GameStopped(o.Game.ExeName, o.Err())
+				}
+			}
+
 			o.current = nil
 		}
 	}
@@ -105,6 +124,9 @@ func (o *Routine) checkGameRunning() error {
 
 	o.current = runningGame
 	o.ticker.Stop()
+	if o.Notif != nil {
+		o.Notif.GameStarted(o.Game.ExeName)
+	}
 
 	return nil
 }
@@ -139,7 +161,7 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 	go func() {
 		_, err := process.Wait()
 		if err == nil {
-			err = errors.New("process ended unexpectedly without error")
+			err = gameExitedNormallyErr
 		}
 
 		runningGame.exited(err)
