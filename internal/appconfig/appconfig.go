@@ -2,10 +2,11 @@ package appconfig
 
 import (
 	"fmt"
-	"github.com/SeungKang/speedometer/internal/ini"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/SeungKang/blaj/internal/ini"
 )
 
 func Parse(r io.Reader) (*Config, error) {

@@ -4,19 +4,21 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/SeungKang/speedometer/internal/appconfig"
-	"github.com/SeungKang/speedometer/internal/gamectl"
-	"github.com/getlantern/systray"
-	"github.com/stephen-fox/user32util"
 	_ "image/png"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
+
+	"github.com/SeungKang/blaj/internal/appconfig"
+	"github.com/SeungKang/blaj/internal/gamectl"
+	"github.com/getlantern/systray"
+	"github.com/stephen-fox/user32util"
 )
 
-const appName = "buh"
+const appName = "blaj"
 
 var (
 	//go:embed juul-green.ico

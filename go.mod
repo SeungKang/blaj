@@ -1,4 +1,4 @@
-module github.com/SeungKang/speedometer
+module github.com/SeungKang/blaj
 
 go 1.19
 

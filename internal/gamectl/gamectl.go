@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Andoryuuta/kiwi"
-	"github.com/SeungKang/speedometer/internal/appconfig"
-	"github.com/mitchellh/go-ps"
-	"github.com/stephen-fox/user32util"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/Andoryuuta/kiwi"
+	"github.com/SeungKang/blaj/internal/appconfig"
+	"github.com/mitchellh/go-ps"
+	"github.com/stephen-fox/user32util"
 )
 
 var (
