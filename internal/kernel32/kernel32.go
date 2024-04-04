@@ -2,7 +2,6 @@ package kernel32
 
 import (
 	"fmt"
-	"github.com/Andoryuuta/kiwi/w32"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -20,23 +19,29 @@ var (
 // ModuleBaseAddr returns the base address of the target module file
 // the process handle must be opened with
 // windows.PROCESS_VM_READ | windows.PROCESS_QUERY_INFORMATION
-func ModuleBaseAddr(handle w32.HANDLE, targetModuleFilename string) (uintptr, error) {
+func ModuleBaseAddr(processHandle syscall.Handle, targetModuleFilename string) (uintptr, error) {
 	targetModuleFilename = strings.ToLower(targetModuleFilename)
 
-	moduleHandles, err := EnumProcessModules(handle)
+	moduleHandles := make([]syscall.Handle, 1024)
+	numModuleHandles, err := EnumProcessModules(processHandle, moduleHandles)
 	if err != nil {
 		return 0, fmt.Errorf("failed to enum process modules - %w", err)
 	}
+	defer func() {
+		for _, handle := range moduleHandles[0:numModuleHandles] {
+			syscall.CloseHandle(handle)
+		}
+	}()
 
-	for _, moduleHandle := range moduleHandles {
-		fileName, err := GetModuleFilenameExW(handle, moduleHandle)
+	for _, moduleHandle := range moduleHandles[0:numModuleHandles] {
+		fileName, err := GetModuleFilenameExW(processHandle, moduleHandle)
 		if err != nil {
 			return 0, fmt.Errorf("failed to get module filename - %w", err)
 		}
 
 		if strings.ToLower(filepath.Base(fileName)) == targetModuleFilename {
 			var info MODULEINFO
-			err := GetModuleInformation(handle, moduleHandle, &info)
+			err := GetModuleInformation(processHandle, moduleHandle, &info)
 			if err != nil {
 				return 0, fmt.Errorf("failed to get module information - %w", err)
 			}
@@ -49,37 +54,34 @@ func ModuleBaseAddr(handle w32.HANDLE, targetModuleFilename string) (uintptr, er
 }
 
 // TODO: investigate using EnumProcessModulesEx
-func EnumProcessModules(hProcess w32.HANDLE) ([]w32.HANDLE, error) {
-	var hMods [1024]w32.HANDLE
-	needed := uint32(0)
+func EnumProcessModules(hProcess syscall.Handle, lphModule []syscall.Handle) (uintptr, error) {
+	lpcbNeeded := uint32(0)
 
 	_, _, err := pEnumProcessModules.Call(
 		uintptr(hProcess),
-		uintptr(unsafe.Pointer(&hMods)),
-		uintptr(len(hMods)),
-		uintptr(unsafe.Pointer(&needed)))
-	if err.(syscall.Errno) == 0 {
-		// Number of hModules returned
-		n := (uintptr(needed) / unsafe.Sizeof(w32.HANDLE(0)))
-		return hMods[:n], nil
+		uintptr(unsafe.Pointer(&lphModule[0])),
+		uintptr(len(lphModule)),
+		uintptr(unsafe.Pointer(&lpcbNeeded)))
+	if err.(syscall.Errno) != 0 {
+		return 0, err
 	}
 
-	return hMods[:], err
+	return uintptr(lpcbNeeded) / unsafe.Sizeof(syscall.Handle(0)), nil
 }
 
-func GetModuleFilenameExW(hProcess w32.HANDLE, hModule w32.HANDLE) (string, error) {
-	var lpFilename [syscall.MAX_PATH]uint16
+func GetModuleFilenameExW(hProcess syscall.Handle, hModule syscall.Handle) (string, error) {
+	lpFilename := make([]uint16, syscall.MAX_PATH)
 
 	_, _, err := pGetModuleFileNameExW.Call(
 		uintptr(hProcess),
 		uintptr(hModule),
-		uintptr(unsafe.Pointer(&lpFilename)),
+		uintptr(unsafe.Pointer(&lpFilename[0])),
 		uintptr(len(lpFilename)))
-	if err.(syscall.Errno) == 0 {
-		return syscall.UTF16ToString(lpFilename[:]), nil
+	if err.(syscall.Errno) != 0 {
+		return "", err
 	}
 
-	return "", err
+	return syscall.UTF16ToString(lpFilename[:]), nil
 }
 
 type MODULEINFO struct {
@@ -88,7 +90,7 @@ type MODULEINFO struct {
 	EntryPoint  uintptr
 }
 
-func GetModuleInformation(hProcess w32.HANDLE, hModule w32.HANDLE, lpmodinfo *MODULEINFO) error {
+func GetModuleInformation(hProcess syscall.Handle, hModule syscall.Handle, lpmodinfo *MODULEINFO) error {
 	_, _, err := pGetModuleInformation.Call(
 		uintptr(hProcess),
 		uintptr(hModule),

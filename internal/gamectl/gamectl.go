@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Andoryuuta/kiwi"
@@ -148,7 +149,7 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 		done:   make(chan struct{}),
 	}
 
-	baseAddr, err := kernel32.ModuleBaseAddr(proc.Handle, game.ExeName)
+	baseAddr, err := kernel32.ModuleBaseAddr(syscall.Handle(proc.Handle), game.ExeName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get module base address - %w", err)
 	}
