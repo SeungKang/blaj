@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	_ "image/png"
 	"os"
 	"os/signal"
 	"path/filepath"
