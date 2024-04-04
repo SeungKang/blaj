@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Andoryuuta/kiwi"
@@ -102,9 +104,10 @@ func (o *Routine) checkGameRunning() error {
 		return fmt.Errorf("failed to get active processes - %w", err)
 	}
 
+	exeName := strings.ToLower(o.Game.ExeName)
 	possiblePID := -1
 	for _, process := range processes {
-		if process.Executable() == o.Game.ExeName {
+		if strings.ToLower(process.Executable()) == exeName {
 			possiblePID = process.Pid()
 			break
 		}
@@ -148,7 +151,7 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 		done:   make(chan struct{}),
 	}
 
-	baseAddr, err := kernel32.ModuleBaseAddr(proc.Handle, game.ExeName)
+	baseAddr, err := kernel32.ModuleBaseAddr(syscall.Handle(proc.Handle), game.ExeName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get module base address - %w", err)
 	}
