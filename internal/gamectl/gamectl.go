@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -103,9 +104,10 @@ func (o *Routine) checkGameRunning() error {
 		return fmt.Errorf("failed to get active processes - %w", err)
 	}
 
+	exeName := strings.ToLower(o.Game.ExeName)
 	possiblePID := -1
 	for _, process := range processes {
-		if process.Executable() == o.Game.ExeName {
+		if strings.ToLower(process.Executable()) == exeName {
 			possiblePID = process.Pid()
 			break
 		}
