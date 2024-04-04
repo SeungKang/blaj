@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andoryuuta/kiwi"
 	"github.com/SeungKang/blaj/internal/appconfig"
+	"github.com/SeungKang/blaj/internal/kernel32"
 	"github.com/mitchellh/go-ps"
 	"github.com/stephen-fox/user32util"
 )
@@ -147,6 +148,12 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 		done:   make(chan struct{}),
 	}
 
+	baseAddr, err := kernel32.ModuleBaseAddr(proc.Handle, game.ExeName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get module base address - %w", err)
+	}
+	runningGame.base = baseAddr
+
 	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, dll)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create listener - %s", err.Error())
@@ -182,6 +189,7 @@ func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32u
 
 type runningGameRoutine struct {
 	game   *appconfig.Game
+	base   uintptr
 	proc   kiwi.Process
 	states map[string]*gameState
 	once   sync.Once
@@ -230,18 +238,22 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 	case o.game.SaveState:
 		for name, state := range o.states {
 			log.Printf("saving state %s at %+v", name, state.pointer)
+
 			// TODO: refactor function to just take a single slice
-			addr, err := getAddr(o.proc, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
 			if err != nil {
 				return err
 			}
 
 			savedState, err := o.proc.ReadUint32(uintptr(addr))
 			if err != nil {
-				return err
+				// TODO update with INI name
+				return fmt.Errorf("error while trying to read from %s at 0x%x - %w",
+					name, addr, err)
 			}
 
-			log.Printf("saved state %s at %+v as 0x%x", name, state.pointer, savedState)
+			log.Printf("saved state %s at %+v as 0x%x",
+				name, state.pointer, savedState)
 
 			state.savedState = savedState
 			state.stateSet = true
@@ -252,23 +264,26 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 				continue
 			}
 
-			log.Printf("restoring state %s at %+v to 0x%x", name, state.pointer, state.savedState)
-			addr, err := getAddr(o.proc, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			log.Printf("restoring state %s at %+v to 0x%x",
+				name, state.pointer, state.savedState)
+
+			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
 			if err != nil {
 				return err
 			}
 
 			err = o.proc.WriteUint32(uintptr(addr), state.savedState)
 			if err != nil {
-				return err
+				return fmt.Errorf("error while trying to write to %s at 0x%x - %w",
+					name, addr, err)
 			}
 		}
 	}
 	return nil
 }
 
-func getAddr(proc kiwi.Process, start uint32, offsets ...uint32) (uint32, error) {
-	addr, err := proc.ReadUint32(uintptr(start + 0x400000)) // 400000 the base address
+func getAddr(proc kiwi.Process, base uintptr, start uint32, offsets ...uint32) (uint32, error) {
+	addr, err := proc.ReadUint32(base + uintptr(start))
 	if err != nil {
 		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", addr, err)
 	}
