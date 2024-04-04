@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -75,11 +76,10 @@ func (o *app) ready() {
 
 func (o *app) loop(ctx context.Context) {
 	for {
-		var cancelFn func()
-		ctx, cancelFn = context.WithCancel(ctx)
-		defer cancelFn()
+		gameCtx, cancelGameCtxFn := context.WithCancel(ctx)
+		defer cancelGameCtxFn()
 
-		gameUIs, gameErrors, err := startApp(ctx)
+		gameUIs, gameErrors, err := startApp(gameCtx)
 		if err != nil {
 			goto onError
 		}
@@ -94,7 +94,9 @@ func (o *app) loop(ctx context.Context) {
 		}
 
 	onError:
-		cancelFn()
+		log.Printf("app loop error - %v", err)
+
+		cancelGameCtxFn()
 
 		o.status.SetTitle("Status: error")
 		systray.SetIcon(juulRed)
