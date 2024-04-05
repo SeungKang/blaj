@@ -292,7 +292,7 @@ func getAddr(proc kiwi.Process, base uintptr, start uint32, offsets ...uint32) (
 	}
 
 	if len(offsets) == 0 {
-		return start + 0x400000, nil
+		return uint32(base) + start, nil
 	}
 
 	for _, offset := range offsets[:len(offsets)-1] {
