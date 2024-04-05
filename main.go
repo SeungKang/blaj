@@ -20,19 +20,19 @@ import (
 const appName = "blaj"
 
 var (
-	//go:embed juul-green.ico
-	juulGreen []byte
+	//go:embed icons/shark_green.ico
+	sharkGreen []byte
 
-	//go:embed juul-red.ico
-	juulRed []byte
+	//go:embed icons/shark_red.ico
+	sharkRed []byte
 
-	//go:embed juul-red.ico
+	//go:embed icons/shark_red.ico
 	gameErrorIcon []byte
 
-	//go:embed juul-red.ico
+	//go:embed icons/shark_blue.ico
 	gameNotRunningIcon []byte
 
-	//go:embed juul-green.ico
+	//go:embed icons/shark_green.ico
 	gameRunningIcon []byte
 )
 
@@ -48,7 +48,7 @@ type app struct {
 
 func (o *app) ready() {
 	systray.SetTitle(appName)
-	systray.SetIcon(juulGreen)
+	systray.SetIcon(sharkGreen)
 
 	systray.AddMenuItem(appName, "").Disable()
 	systray.AddSeparator()
@@ -81,11 +81,11 @@ func (o *app) loop(ctx context.Context) {
 
 		gameUIs, gameErrors, err := startApp(gameCtx)
 		if err != nil {
-			goto onError
+			goto onGameExit
 		}
 
 		o.status.SetTitle("Status: running")
-		systray.SetIcon(juulGreen)
+		systray.SetIcon(sharkGreen)
 		o.statusChild.Hide()
 
 		select {
@@ -93,18 +93,21 @@ func (o *app) loop(ctx context.Context) {
 		case err = <-gameErrors:
 		}
 
-	onError:
+	onGameExit:
 		log.Printf("app loop error - %v", err)
 
 		cancelGameCtxFn()
 
-		o.status.SetTitle("Status: error")
-		systray.SetIcon(juulRed)
-		o.statusChild.SetTitle(err.Error())
-		o.statusChild.Show()
+		if err != nil {
+			o.status.SetTitle("Status: error")
+			systray.SetIcon(sharkRed)
+			o.statusChild.SetTitle(err.Error())
+			o.statusChild.Show()
+		}
 
 		select {
 		case <-ctx.Done():
+			log.Printf("app loop exited - %s", ctx.Err())
 			return
 		case <-time.After(5 * time.Second):
 			for _, ui := range gameUIs {
@@ -117,7 +120,7 @@ func (o *app) loop(ctx context.Context) {
 }
 
 func (o *app) exit() {
-	os.Exit(0)
+	systray.Quit()
 }
 
 func newGameUI(game *appconfig.Game) *gameUI {
