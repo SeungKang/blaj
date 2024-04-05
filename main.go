@@ -44,6 +44,10 @@ func main() {
 type app struct {
 	status      *systray.MenuItem
 	statusChild *systray.MenuItem
+	mu          sync.Mutex
+	lastAppErr  error
+	// TODO: use INI header as key
+	games map[string]error
 }
 
 func (o *app) ready() {
@@ -121,6 +125,70 @@ func (o *app) loop(ctx context.Context) {
 
 func (o *app) exit() {
 	systray.Quit()
+}
+
+func (o *app) gameErroredStatus(exename string, err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.games == nil {
+		o.games = make(map[string]error)
+	}
+
+	o.games[exename] = err
+	if o.lastAppErr == nil {
+		o.status.SetTitle("Status: error")
+		o.statusChild.Show()
+		o.statusChild.SetTitle(err.Error())
+	}
+
+	systray.SetIcon(juulRed)
+}
+
+func (o *app) gameOkStatus(exename string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.games == nil {
+		o.games = make(map[string]error)
+	}
+
+	o.games[exename] = nil
+	for _, err := range o.games {
+		if err != nil {
+			return
+		}
+	}
+
+	systray.SetIcon(juulGreen)
+}
+
+func (o *app) appRunningStatus() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.lastAppErr = nil
+	for _, err := range o.games {
+		if err != nil {
+			return
+		}
+	}
+
+	o.status.SetTitle("Status: running")
+	systray.SetIcon(juulGreen)
+	o.statusChild.Hide()
+}
+
+func (o *app) appErrorStatus(err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.lastAppErr = err
+
+	o.status.SetTitle("Status: error")
+	systray.SetIcon(juulRed)
+	o.statusChild.SetTitle(err.Error())
+	o.statusChild.Show()
 }
 
 func newGameUI(game *appconfig.Game) *gameUI {
