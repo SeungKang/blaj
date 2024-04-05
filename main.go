@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -142,7 +143,7 @@ func (o *app) gameErroredStatus(exename string, err error) {
 		o.statusChild.SetTitle(err.Error())
 	}
 
-	systray.SetIcon(juulRed)
+	systray.SetIcon(sharkRed)
 }
 
 func (o *app) gameOkStatus(exename string) {
@@ -160,7 +161,7 @@ func (o *app) gameOkStatus(exename string) {
 		}
 	}
 
-	systray.SetIcon(juulGreen)
+	systray.SetIcon(sharkGreen)
 }
 
 func (o *app) appRunningStatus() {
@@ -175,7 +176,7 @@ func (o *app) appRunningStatus() {
 	}
 
 	o.status.SetTitle("Status: running")
-	systray.SetIcon(juulGreen)
+	systray.SetIcon(sharkGreen)
 	o.statusChild.Hide()
 }
 
@@ -186,7 +187,7 @@ func (o *app) appErrorStatus(err error) {
 	o.lastAppErr = err
 
 	o.status.SetTitle("Status: error")
-	systray.SetIcon(juulRed)
+	systray.SetIcon(sharkRed)
 	o.statusChild.SetTitle(err.Error())
 	o.statusChild.Show()
 }
