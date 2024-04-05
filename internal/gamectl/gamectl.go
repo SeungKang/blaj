@@ -31,7 +31,7 @@ type Routine struct {
 	Game    *appconfig.Game
 	User32  *user32util.User32DLL
 	Notif   Notifier
-	ticker  *time.Ticker
+	timer   *time.Timer
 	current *runningGameRoutine
 	done    chan struct{}
 	err     error
@@ -47,7 +47,7 @@ func (o *Routine) Err() error {
 
 func (o *Routine) Start(ctx context.Context) {
 	o.done = make(chan struct{})
-	o.ticker = time.NewTicker(5 * time.Second)
+	o.timer = time.NewTimer(time.Millisecond)
 
 	go o.loop(ctx)
 }
@@ -63,7 +63,7 @@ func (o *Routine) loop(ctx context.Context) {
 
 func (o *Routine) loopWithError(ctx context.Context) error {
 	defer func() {
-		o.ticker.Stop()
+		o.timer.Stop()
 		if o.current != nil {
 			o.current.Stop()
 		}
@@ -73,14 +73,14 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-o.ticker.C:
+		case <-o.timer.C:
 			err := o.checkGameRunning()
 			if err != nil {
 				return fmt.Errorf("failed to handle game startup for %s - %w", o.Game.ExeName, err)
 			}
 		case <-o.current.Done():
 			log.Printf("%s routine exited - %s", o.Game.ExeName, o.current.Err())
-			o.ticker.Reset(5 * time.Second)
+			o.timer.Reset(5 * time.Second)
 
 			if o.Notif != nil {
 				if errors.Is(o.current.Err(), gameExitedNormallyErr) {
@@ -114,21 +114,16 @@ func (o *Routine) checkGameRunning() error {
 	}
 
 	if possiblePID == -1 {
+		o.timer.Reset(5 * time.Second)
 		return nil
 	}
 
-	proc, err := kiwi.GetProcessByPID(possiblePID)
-	if err != nil {
-		return fmt.Errorf("failed to get process by PID - %w", err)
-	}
-
-	runningGame, err := newRunningGameRoutine(o.Game, proc, o.User32)
+	runningGame, err := newRunningGameRoutine(o.Game, possiblePID, o.User32)
 	if err != nil {
 		return fmt.Errorf("failed to create new running game routine - %w", err)
 	}
 
 	o.current = runningGame
-	o.ticker.Stop()
 	if o.Notif != nil {
 		o.Notif.GameStarted(o.Game.ExeName)
 	}
@@ -136,7 +131,12 @@ func (o *Routine) checkGameRunning() error {
 	return nil
 }
 
-func newRunningGameRoutine(game *appconfig.Game, proc kiwi.Process, dll *user32util.User32DLL) (*runningGameRoutine, error) {
+func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32DLL) (*runningGameRoutine, error) {
+	proc, err := kiwi.GetProcessByPID(pid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get process by PID - %w", err)
+	}
+
 	gameStates := make(map[string]*gameState)
 	for _, pointer := range game.Pointers {
 		gameStates[pointer.Name] = &gameState{
