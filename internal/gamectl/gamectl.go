@@ -240,7 +240,7 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 	switch event.Struct.VirtualKeyCode() {
 	case o.game.SaveState:
 		for name, state := range o.states {
-			log.Printf("saving state %s at %+v", name, state.pointer)
+			log.Printf("saving state %s at %+#v", name, state.pointer)
 
 			// TODO: refactor function to just take a single slice
 			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
@@ -248,14 +248,14 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 				return err
 			}
 
-			savedState, err := o.proc.ReadUint32(uintptr(addr))
+			savedState, err := o.proc.ReadBytes(uintptr(addr), state.pointer.NBytes)
 			if err != nil {
 				// TODO update with INI name
 				return fmt.Errorf("error while trying to read from %s at 0x%x - %w",
 					name, addr, err)
 			}
 
-			log.Printf("saved state %s at %+v as 0x%x",
+			log.Printf("saved state %s at %+#v as 0x%x",
 				name, state.pointer, savedState)
 
 			state.savedState = savedState
@@ -267,7 +267,7 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 				continue
 			}
 
-			log.Printf("restoring state %s at %+v to 0x%x",
+			log.Printf("restoring state %s at %+#v to 0x%x",
 				name, state.pointer, state.savedState)
 
 			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
@@ -275,7 +275,7 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 				return err
 			}
 
-			err = o.proc.WriteUint32(uintptr(addr), state.savedState)
+			err = o.proc.WriteBytes(uintptr(addr), state.savedState)
 			if err != nil {
 				return fmt.Errorf("error while trying to write to %s at 0x%x - %w",
 					name, addr, err)
@@ -308,5 +308,5 @@ func getAddr(proc kiwi.Process, base uintptr, start uint32, offsets ...uint32) (
 type gameState struct {
 	pointer    appconfig.Pointer
 	stateSet   bool
-	savedState uint32 // TODO: use uintpointer
+	savedState []byte
 }

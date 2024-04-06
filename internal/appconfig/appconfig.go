@@ -9,6 +9,10 @@ import (
 	"github.com/SeungKang/blaj/internal/ini"
 )
 
+const (
+	pointerParamSuffix = "Pointer_"
+)
+
 func Parse(r io.Reader) (*Config, error) {
 	iniConfig, err := ini.Parse(r)
 	if err != nil {
@@ -49,7 +53,7 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 
 	var pointers []Pointer
 	for _, param := range section.Params {
-		if strings.HasSuffix(param.Name, "Pointer") {
+		if strings.Contains(param.Name, pointerParamSuffix) {
 			pointer, err := pointerFromParam(param)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse pointer: %q - %w",
@@ -93,6 +97,22 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 }
 
 func pointerFromParam(param *ini.Param) (Pointer, error) {
+	if strings.Count(param.Name, pointerParamSuffix) > 1 {
+		return Pointer{}, fmt.Errorf("%q found more than once, please don't do that >:c",
+			pointerParamSuffix)
+	}
+
+	_, sizeStr, hasIt := strings.Cut(param.Name, pointerParamSuffix)
+	if !hasIt {
+		return Pointer{}, fmt.Errorf("pointer missing number of bytes to save")
+	}
+
+	size, err := strconv.ParseUint(sizeStr, 10, 32)
+	if err != nil {
+		return Pointer{}, fmt.Errorf("failed to parse size %q - %w",
+			sizeStr, err)
+	}
+
 	strs := strings.Fields(param.Value)
 	if len(strs) == 0 {
 		return Pointer{}, fmt.Errorf("pointer is empty")
@@ -110,7 +130,11 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 		values = append(values, uint32(value))
 	}
 
-	return Pointer{Name: param.Name, Addrs: values}, nil
+	return Pointer{
+		Name:   param.Name,
+		Addrs:  values,
+		NBytes: int(size),
+	}, nil
 }
 
 func keybindFromStr(keybindStr string) (byte, error) {
@@ -129,6 +153,7 @@ type Game struct {
 }
 
 type Pointer struct {
-	Name  string
-	Addrs []uint32
+	Name   string
+	Addrs  []uint32
+	NBytes int
 }
