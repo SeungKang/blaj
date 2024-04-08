@@ -154,12 +154,14 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 
 	baseAddr, err := kernel32.ModuleBaseAddr(syscall.Handle(proc.Handle), game.ExeName)
 	if err != nil {
+		runningGame.Stop()
 		return nil, fmt.Errorf("failed to get module base address - %w", err)
 	}
 	runningGame.base = baseAddr
 
 	is32Bit, err := kernel32.IsProcess32Bit(syscall.Handle(proc.Handle))
 	if err != nil {
+		runningGame.Stop()
 		return nil, fmt.Errorf("failed to determine if process is 32 bit - %w", err)
 	}
 	runningGame.is32b = is32Bit
@@ -178,6 +180,7 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 
 	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, dll)
 	if err != nil {
+		runningGame.Stop()
 		return nil, fmt.Errorf("failed to create listener - %s", err.Error())
 	}
 	runningGame.ln = listener
@@ -240,7 +243,10 @@ func (o *runningGameRoutine) Err() error {
 
 func (o *runningGameRoutine) exited(err error) {
 	o.once.Do(func() {
-		o.ln.Release()
+		_ = syscall.CloseHandle(syscall.Handle(o.proc.Handle))
+		if o.ln != nil {
+			o.ln.Release()
+		}
 		o.err = err
 		close(o.done)
 	})

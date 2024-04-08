@@ -45,6 +45,7 @@ func ModuleBaseAddr(processHandle syscall.Handle, targetModuleFilename string) (
 		}
 	}()
 
+	// TODO: close module handle
 	for _, moduleHandle := range moduleHandles[0:numModuleHandles] {
 		fileName, err := GetModuleFilenameExW(processHandle, moduleHandle)
 		if err != nil {
