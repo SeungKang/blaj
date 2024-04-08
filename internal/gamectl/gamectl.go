@@ -131,6 +131,7 @@ func (o *Routine) checkGameRunning() error {
 	return nil
 }
 
+// TODO: make source file for running game stuff
 func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32DLL) (*runningGameRoutine, error) {
 	proc, err := kiwi.GetProcessByPID(pid)
 	if err != nil {
@@ -156,6 +157,24 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 		return nil, fmt.Errorf("failed to get module base address - %w", err)
 	}
 	runningGame.base = baseAddr
+
+	is32Bit, err := kernel32.IsProcess32Bit(syscall.Handle(proc.Handle))
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine if process is 32 bit - %w", err)
+	}
+	runningGame.is32b = is32Bit
+
+	if is32Bit {
+		runningGame.addrFn = func(u uintptr) (uintptr, error) {
+			data, err := proc.ReadUint32(u)
+			return uintptr(data), err
+		}
+	} else {
+		runningGame.addrFn = func(u uintptr) (uintptr, error) {
+			data, err := proc.ReadUint64(u)
+			return uintptr(data), err
+		}
+	}
 
 	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, dll)
 	if err != nil {
@@ -193,6 +212,8 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 type runningGameRoutine struct {
 	game   *appconfig.Game
 	base   uintptr
+	is32b  bool
+	addrFn func(uintptr) (uintptr, error)
 	proc   kiwi.Process
 	states map[string]*gameState
 	once   sync.Once
@@ -240,26 +261,11 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 	switch event.Struct.VirtualKeyCode() {
 	case o.game.SaveState:
 		for name, state := range o.states {
-			log.Printf("saving state %s at %+#v", name, state.pointer)
-
-			// TODO: refactor function to just take a single slice
-			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			err := o.saveState(name, state)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to save state %s at %+#v to 0x%x",
+					name, state.pointer, state.savedState)
 			}
-
-			savedState, err := o.proc.ReadBytes(uintptr(addr), state.pointer.NBytes)
-			if err != nil {
-				// TODO update with INI name
-				return fmt.Errorf("error while trying to read from %s at 0x%x - %w",
-					name, addr, err)
-			}
-
-			log.Printf("saved state %s at %+#v as 0x%x",
-				name, state.pointer, savedState)
-
-			state.savedState = savedState
-			state.stateSet = true
 		}
 	case o.game.RestoreState:
 		for name, state := range o.states {
@@ -267,41 +273,84 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 				continue
 			}
 
-			log.Printf("restoring state %s at %+#v to 0x%x",
-				name, state.pointer, state.savedState)
-
-			addr, err := getAddr(o.proc, o.base, state.pointer.Addrs[0], state.pointer.Addrs[1:]...)
+			err := o.restoreState(name, state)
 			if err != nil {
-				return err
-			}
-
-			err = o.proc.WriteBytes(uintptr(addr), state.savedState)
-			if err != nil {
-				return fmt.Errorf("error while trying to write to %s at 0x%x - %w",
-					name, addr, err)
+				return fmt.Errorf("failed to restore state %s at %+#v to 0x%x",
+					name, state.pointer, state.savedState)
 			}
 		}
 	}
+
 	return nil
 }
 
-func getAddr(proc kiwi.Process, base uintptr, start uint32, offsets ...uint32) (uint32, error) {
-	addr, err := proc.ReadUint32(base + uintptr(start))
+func (o *runningGameRoutine) saveState(name string, state *gameState) error {
+	log.Printf("saving state %s at %+#v", name, state.pointer)
+
+	stateAddr, err := lookupAddr(o.base, state.pointer, o.addrFn)
 	if err != nil {
-		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", addr, err)
+		return fmt.Errorf("failed to lookup address of state %s - %w",
+			name, err)
 	}
 
-	if len(offsets) == 0 {
-		return uint32(base) + start, nil
+	savedState, err := o.proc.ReadBytes(stateAddr, state.pointer.NBytes)
+	if err != nil {
+		// TODO update with INI name
+		return fmt.Errorf("error while trying to read from %s at 0x%x - %w",
+			name, stateAddr, err)
 	}
 
+	log.Printf("saved state %s at %+#v as 0x%x",
+		name, state.pointer, savedState)
+
+	state.savedState = savedState
+	state.stateSet = true
+
+	return nil
+}
+
+func (o *runningGameRoutine) restoreState(name string, state *gameState) error {
+	log.Printf("restoring state %s at %+#v to 0x%x",
+		name, state.pointer, state.savedState)
+
+	stateAddr, err := lookupAddr(o.base, state.pointer, o.addrFn)
+	if err != nil {
+		return fmt.Errorf("failed to get memory address of state %s - %w",
+			name, err)
+	}
+
+	err = o.proc.WriteBytes(stateAddr, state.savedState)
+	if err != nil {
+		return fmt.Errorf("error while trying to write to %s at 0x%x - %w",
+			name, stateAddr, err)
+	}
+
+	return nil
+}
+
+func lookupAddr(base uintptr, ptr appconfig.Pointer, addrFn func(uintptr) (uintptr, error)) (uintptr, error) {
+	start := ptr.Addrs[0]
+	if len(ptr.Addrs) == 1 {
+		return base + start, nil
+	}
+
+	addr, err := addrFn(base + start)
+	if err != nil {
+		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w",
+			addr, err)
+	}
+
+	var offsets = ptr.Addrs[1:]
 	for _, offset := range offsets[:len(offsets)-1] {
-		addr, err = proc.ReadUint32(uintptr(addr + offset))
+		addr, err = addrFn(addr + offset)
 		if err != nil {
-			return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w", addr, err)
+			return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w",
+				addr, err)
 		}
 	}
+
 	addr += offsets[len(offsets)-1]
+
 	return addr, nil
 }
 

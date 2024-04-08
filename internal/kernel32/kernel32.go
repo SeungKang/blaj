@@ -6,6 +6,8 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -15,6 +17,16 @@ var (
 	pGetModuleFileNameExW = kernel32.NewProc("K32GetModuleFileNameExW")
 	pGetModuleInformation = kernel32.NewProc("K32GetModuleInformation")
 )
+
+func IsProcess32Bit(processHandle syscall.Handle) (bool, error) {
+	var isProcess32Bit bool
+	err := windows.IsWow64Process(windows.Handle(processHandle), &isProcess32Bit)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if process is 32 bit - %w", err)
+	}
+
+	return isProcess32Bit, nil
+}
 
 // ModuleBaseAddr returns the base address of the target module file
 // the process handle must be opened with

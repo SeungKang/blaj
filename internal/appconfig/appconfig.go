@@ -118,16 +118,16 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 		return Pointer{}, fmt.Errorf("pointer is empty")
 	}
 
-	var values []uint32
+	var values []uintptr
 	for _, str := range strs {
 		str = strings.TrimPrefix(str, "0x")
-		value, err := strconv.ParseUint(str, 16, 32)
+		value, err := strconv.ParseUint(str, 16, 64)
 		if err != nil {
 			return Pointer{}, fmt.Errorf("failed to convert string to uint: %q - %w",
 				str, err)
 		}
 
-		values = append(values, uint32(value))
+		values = append(values, uintptr(value))
 	}
 
 	return Pointer{
@@ -154,6 +154,6 @@ type Game struct {
 
 type Pointer struct {
 	Name   string
-	Addrs  []uint32
+	Addrs  []uintptr
 	NBytes int
 }
