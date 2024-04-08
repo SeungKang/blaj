@@ -21,19 +21,19 @@ import (
 const appName = "blaj"
 
 var (
-	//go:embed icons/shark_green.ico
-	sharkGreen []byte
+	//go:embed icons/shark_blue.ico
+	sharkBlue []byte
 
 	//go:embed icons/shark_red.ico
 	sharkRed []byte
 
-	//go:embed icons/shark_red.ico
+	//go:embed icons/shark_red_white.ico
 	gameErrorIcon []byte
 
-	//go:embed icons/shark_blue.ico
+	//go:embed icons/shark_blue_white.ico
 	gameNotRunningIcon []byte
 
-	//go:embed icons/shark_green.ico
+	//go:embed icons/shark_green_white.ico
 	gameRunningIcon []byte
 )
 
@@ -53,7 +53,7 @@ type app struct {
 
 func (o *app) ready() {
 	systray.SetTitle(appName)
-	systray.SetIcon(sharkGreen)
+	systray.SetIcon(sharkBlue)
 
 	systray.AddMenuItem(appName, "").Disable()
 	systray.AddSeparator()
@@ -90,7 +90,7 @@ func (o *app) loop(ctx context.Context) {
 		}
 
 		o.status.SetTitle("Status: running")
-		systray.SetIcon(sharkGreen)
+		systray.SetIcon(sharkBlue)
 		o.statusChild.Hide()
 
 		select {
@@ -161,7 +161,7 @@ func (o *app) gameOkStatus(exename string) {
 		}
 	}
 
-	systray.SetIcon(sharkGreen)
+	systray.SetIcon(sharkBlue)
 }
 
 func (o *app) appRunningStatus() {
@@ -176,7 +176,7 @@ func (o *app) appRunningStatus() {
 	}
 
 	o.status.SetTitle("Status: running")
-	systray.SetIcon(sharkGreen)
+	systray.SetIcon(sharkBlue)
 	o.statusChild.Hide()
 }
 
@@ -213,6 +213,8 @@ type gameUI struct {
 }
 
 func (o *gameUI) GameStarted(exename string) {
+	log.Printf("connected to %s", exename)
+
 	o.runningMenu.SetIcon(gameRunningIcon)
 	o.runningMenu.Show()
 
@@ -220,6 +222,8 @@ func (o *gameUI) GameStarted(exename string) {
 }
 
 func (o *gameUI) GameStopped(exename string, err error) {
+	log.Printf("disconnected from %s", exename)
+
 	if err != nil {
 		o.errorMenu.SetIcon(gameErrorIcon)
 		o.errorMenu.Show()
