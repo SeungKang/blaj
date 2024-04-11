@@ -104,10 +104,9 @@ func (o *Routine) checkGameRunning() error {
 		return fmt.Errorf("failed to get active processes - %w", err)
 	}
 
-	exeName := strings.ToLower(o.Game.ExeName)
 	possiblePID := -1
 	for _, process := range processes {
-		if strings.ToLower(process.Executable()) == exeName {
+		if strings.ToLower(process.Executable()) == o.Game.ExeName {
 			possiblePID = process.Pid()
 			break
 		}
@@ -152,12 +151,20 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 		done:   make(chan struct{}),
 	}
 
-	baseAddr, err := kernel32.ModuleBaseAddr(syscall.Handle(proc.Handle), game.ExeName)
+	modules, err := kernel32.ProcessModules(syscall.Handle(proc.Handle))
 	if err != nil {
 		runningGame.Stop()
-		return nil, fmt.Errorf("failed to get module base address - %w", err)
+		return nil, fmt.Errorf("failed to get process modules - %w", err)
 	}
+
+	baseAddr, requiredModules, err := getRequiredModules(game, modules)
+	if err != nil {
+		runningGame.Stop()
+		return nil, fmt.Errorf("failed to get required modules - %w", err)
+	}
+
 	runningGame.base = baseAddr
+	runningGame.mods = requiredModules
 
 	is32Bit, err := kernel32.IsProcess32Bit(syscall.Handle(proc.Handle))
 	if err != nil {
@@ -212,10 +219,45 @@ func newRunningGameRoutine(game *appconfig.Game, pid int, dll *user32util.User32
 	return runningGame, nil
 }
 
+func getRequiredModules(game *appconfig.Game, modules []kernel32.Module) (uintptr, map[string]kernel32.Module, error) {
+	needed := make(map[string]kernel32.Module)
+	needed[game.ExeName] = kernel32.Module{}
+	for _, pointer := range game.Pointers {
+		if pointer.OptModule != "" {
+			needed[pointer.OptModule] = kernel32.Module{}
+		}
+	}
+
+	numNeeded := len(needed)
+	for _, module := range modules {
+		moduleLc := strings.ToLower(module.Filename)
+
+		_, isRequired := needed[moduleLc]
+		if isRequired {
+			needed[moduleLc] = module
+
+			numNeeded--
+			if numNeeded == 0 {
+				return needed[game.ExeName].BaseAddr, needed, nil
+			}
+		}
+	}
+
+	var missing []string
+	for name, tmp := range needed {
+		if tmp.BaseAddr == 0 {
+			missing = append(missing, name)
+		}
+	}
+
+	return 0, nil, fmt.Errorf("failed to find modules: %q", missing)
+}
+
 type runningGameRoutine struct {
 	game   *appconfig.Game
 	base   uintptr
 	is32b  bool
+	mods   map[string]kernel32.Module
 	addrFn func(uintptr) (uintptr, error)
 	proc   kiwi.Process
 	states map[string]*gameState
@@ -293,7 +335,17 @@ func (o *runningGameRoutine) handleKeyboardEventWithError(event user32util.LowLe
 func (o *runningGameRoutine) saveState(name string, state *gameState) error {
 	log.Printf("saving state %s at %+#v", name, state.pointer)
 
-	stateAddr, err := lookupAddr(o.base, state.pointer, o.addrFn)
+	baseAddr := o.base
+	if state.pointer.OptModule != "" {
+		module, hasIt := o.mods[state.pointer.OptModule]
+		if !hasIt {
+			return fmt.Errorf("unknown module %q", state.pointer.OptModule)
+		}
+
+		baseAddr = module.BaseAddr
+	}
+
+	stateAddr, err := lookupAddr(baseAddr, state.pointer, o.addrFn)
 	if err != nil {
 		return fmt.Errorf("failed to lookup address of state %s - %w",
 			name, err)
@@ -306,8 +358,8 @@ func (o *runningGameRoutine) saveState(name string, state *gameState) error {
 			name, stateAddr, err)
 	}
 
-	log.Printf("saved state %s at %+#v as 0x%x",
-		name, state.pointer, savedState)
+	log.Printf("saved state %s at %x as 0x%x",
+		name, stateAddr, savedState)
 
 	state.savedState = savedState
 	state.stateSet = true
@@ -319,7 +371,17 @@ func (o *runningGameRoutine) restoreState(name string, state *gameState) error {
 	log.Printf("restoring state %s at %+#v to 0x%x",
 		name, state.pointer, state.savedState)
 
-	stateAddr, err := lookupAddr(o.base, state.pointer, o.addrFn)
+	baseAddr := o.base
+	if state.pointer.OptModule != "" {
+		module, hasIt := o.mods[state.pointer.OptModule]
+		if !hasIt {
+			return fmt.Errorf("unknown module %q", state.pointer.OptModule)
+		}
+
+		baseAddr = module.BaseAddr
+	}
+
+	stateAddr, err := lookupAddr(baseAddr, state.pointer, o.addrFn)
 	if err != nil {
 		return fmt.Errorf("failed to get memory address of state %s - %w",
 			name, err)

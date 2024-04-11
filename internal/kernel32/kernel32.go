@@ -3,7 +3,6 @@ package kernel32
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -28,16 +27,22 @@ func IsProcess32Bit(processHandle syscall.Handle) (bool, error) {
 	return isProcess32Bit, nil
 }
 
-// ModuleBaseAddr returns the base address of the target module file
+type Module struct {
+	Filepath string
+	Filename string
+	BaseAddr uintptr
+}
+
+// ProcessModules returns the target process's modules
+//
 // the process handle must be opened with
 // windows.PROCESS_VM_READ | windows.PROCESS_QUERY_INFORMATION
-func ModuleBaseAddr(processHandle syscall.Handle, targetModuleFilename string) (uintptr, error) {
-	targetModuleFilename = strings.ToLower(targetModuleFilename)
-
+func ProcessModules(processHandle syscall.Handle) ([]Module, error) {
+	// TODO: handle more than 1024 (lookup maximum file handles and use that)
 	moduleHandles := make([]syscall.Handle, 1024)
 	numModuleHandles, err := EnumProcessModules(processHandle, moduleHandles)
 	if err != nil {
-		return 0, fmt.Errorf("failed to enum process modules - %w", err)
+		return nil, fmt.Errorf("failed to enum process modules - %w", err)
 	}
 	defer func() {
 		for _, handle := range moduleHandles[0:numModuleHandles] {
@@ -45,25 +50,37 @@ func ModuleBaseAddr(processHandle syscall.Handle, targetModuleFilename string) (
 		}
 	}()
 
-	// TODO: close module handle
-	for _, moduleHandle := range moduleHandles[0:numModuleHandles] {
-		fileName, err := GetModuleFilenameExW(processHandle, moduleHandle)
+	modules := make([]Module, numModuleHandles)
+	for i, moduleHandle := range moduleHandles[0:numModuleHandles] {
+		module, err := lookupModuleInfo(processHandle, moduleHandle)
 		if err != nil {
-			return 0, fmt.Errorf("failed to get module filename - %w", err)
+			return nil, fmt.Errorf("failed to lookup module info handle: %v - %w",
+				moduleHandle, err)
 		}
 
-		if strings.ToLower(filepath.Base(fileName)) == targetModuleFilename {
-			var info MODULEINFO
-			err := GetModuleInformation(processHandle, moduleHandle, &info)
-			if err != nil {
-				return 0, fmt.Errorf("failed to get module information - %w", err)
-			}
-
-			return info.LpBaseOfDll, nil
-		}
+		modules[i] = module
 	}
 
-	return 0, fmt.Errorf("failed to find module filename: %s", targetModuleFilename)
+	return modules, nil
+}
+
+func lookupModuleInfo(processHandle syscall.Handle, moduleHandle syscall.Handle) (Module, error) {
+	fileName, err := GetModuleFilenameExW(processHandle, moduleHandle)
+	if err != nil {
+		return Module{}, fmt.Errorf("failed to get module filename - %w", err)
+	}
+
+	var info MODULEINFO
+	err = GetModuleInformation(processHandle, moduleHandle, &info)
+	if err != nil {
+		return Module{}, fmt.Errorf("failed to get module information - %w", err)
+	}
+
+	return Module{
+		Filepath: fileName,
+		Filename: filepath.Base(fileName),
+		BaseAddr: info.LpBaseOfDll,
+	}, nil
 }
 
 // TODO: investigate using EnumProcessModulesEx

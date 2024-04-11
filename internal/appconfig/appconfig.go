@@ -89,7 +89,7 @@ func gameFromSection(section *ini.Section) (*Game, error) {
 	}
 
 	return &Game{
-		ExeName:      exeName,
+		ExeName:      strings.ToLower(exeName),
 		Pointers:     pointers,
 		SaveState:    saveStateKeybind,
 		RestoreState: restoreStateKeybind,
@@ -113,13 +113,21 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 			sizeStr, err)
 	}
 
+	// TODO: support module names with spaces
 	strs := strings.Fields(param.Value)
 	if len(strs) == 0 {
 		return Pointer{}, fmt.Errorf("pointer is empty")
 	}
 
+	var startIndex int
+	var optModuleName string
+	if strings.Contains(strs[0], ".") {
+		startIndex = 1
+		optModuleName = strs[0]
+	}
+
 	var values []uintptr
-	for _, str := range strs {
+	for _, str := range strs[startIndex:] {
 		str = strings.TrimPrefix(str, "0x")
 		value, err := strconv.ParseUint(str, 16, 64)
 		if err != nil {
@@ -131,9 +139,10 @@ func pointerFromParam(param *ini.Param) (Pointer, error) {
 	}
 
 	return Pointer{
-		Name:   param.Name,
-		Addrs:  values,
-		NBytes: int(size),
+		Name:      param.Name,
+		Addrs:     values,
+		NBytes:    int(size),
+		OptModule: strings.ToLower(optModuleName),
 	}, nil
 }
 
@@ -153,7 +162,8 @@ type Game struct {
 }
 
 type Pointer struct {
-	Name   string
-	Addrs  []uintptr
-	NBytes int
+	Name      string
+	Addrs     []uintptr
+	NBytes    int
+	OptModule string
 }
