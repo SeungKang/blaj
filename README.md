@@ -44,6 +44,10 @@ Several examples of configuration files can be found in the [examples directory]
 
 ## Configuration File Example: Mirror's Edge
 
+Square brackets denote sections (e.g. `[General]`, `[SaveRestore]`).
+Data as key-value pairs are demarcated with an equals sign
+(e.g. `exeName = MirrorsEdge.exe`).
+
 ```ini
 # this is an example comment that blah ignores :>
 
@@ -65,10 +69,6 @@ write = 00000000
 keybind = 5
 ```
 
-Square brackets denote sections (e.g. `[General]`, `[SaveRestore]`).
-Data as key-value pairs are demarcated with an equals sign
-(e.g. `exeName = MirrorsEdge.exe`).
-
 ## [General] (Required)
 
 ### `exeName` (Required, string)
@@ -87,6 +87,27 @@ with any name but must ends with `Pointer_#` where `#` is the number of bytes
 to save/restore (e.g. `xCamPointer_4 = 0x01C47590 0x70 0xF8`). You can specify more
 than one `Pointer_#` parameter in the `[SaveRestore]` section.
 
+Optional: Indicate the module to use as the base address of the pointer. By default
+the value in `exeName` will be used.
+
+### Pointer_# structure
+
+```
+xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
+|__||_____| |   |_____________| |________| |_______|
+|      |    |          |            |          |__ the offsets to get to the memory location containing the value (optional)
+|      |    |          |            |
+|      |    |          |            |__ the offset from the module base address in hexidecimal (required)
+|      |    |          |
+|      |    |          |__ the module to use as the base address (optional)
+|      |    |
+|      |    |__ indicates to save 4 bytes (32 bits) at the memory location specified by the right of the equal sign
+|      |
+|      |__ ending the name with "Pointer_#" lets the program know to parse the values on the right of the equal sign
+| 
+|___ custom name prefix
+```
+
 ### `saveState` and `restoreState` (Required, character)
 
 Set the keybind to save and to restore memory. Can be assigned to a single
@@ -99,6 +120,9 @@ key `5`.
 
 The location in memory to write to. Can be prefixed with any name but must ends
 with `Pointer` (e.g. `xCamPointer = 0x01C47590 0x70 0xF8`)
+
+Note that this is identical to the `Pointer_#` parameter in the `[SaveRestore]` section
+without the `_#`, since size is not required.
 
 ### `Payload` (Required, hexidecimal bytes)
 
