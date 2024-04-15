@@ -49,7 +49,7 @@ Data as key-value pairs are demarcated with an equals sign
 (e.g. `exeName = MirrorsEdge.exe`).
 
 ```ini
-# this is an example comment that blah ignores :>
+# this is an example comment that blaj ignores :>
 
 [General]
 exeName = MirrorsEdge.exe
