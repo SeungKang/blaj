@@ -46,7 +46,7 @@ type INI struct {
 }
 
 // ParserRules partly implements the Schema interface.
-func (o *INI) ParserRules() ParserRules {
+func (o *INI) Rules() ParserRules {
 	return ParserRules{
 		AllowGlobalParams: true,
 	}
