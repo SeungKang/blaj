@@ -31,6 +31,10 @@ type Schema interface {
 	OnGlobalParam(paramName string) (func(*Param) error, SchemaRule)
 
 	// OnSection is called when the parser encounters a section.
+	// It recieves the section name (as defined by the ParserRules)
+	// and the unmodified "canoncial" section name (as it appears
+	// in the section header).
+	//
 	// If the section is known, a non-nil function pointer
 	// should be returned which constructs a new SectionSchema.
 	//
@@ -40,7 +44,7 @@ type Schema interface {
 	// A nil function pointer indicates that the section
 	// is unknown, which is then handled by the rules
 	// specified by ParserRules.
-	OnSection(sectionName string) (func(name string) (SectionSchema, error), SchemaRule)
+	OnSection(sectionName string, canconicalName string) (func() (SectionSchema, error), SchemaRule)
 
 	// Validate is called by the parser when the
 	// parser finishes parsing the INI blob.
@@ -78,15 +82,15 @@ type ParserRules struct {
 	// RequiredGlobalParams contains the required
 	// global parameters (if any).
 	//
-	// A nil map means no global parameters
+	// A nil slice means no global parameters
 	// are required.
-	RequiredGlobalParams map[string]struct{}
+	RequiredGlobalParams []string
 
 	// RequiredSections contains the required
 	// sections (if any).
 	//
-	// A nil map means no sections are required.
-	RequiredSections map[string]struct{}
+	// A nil slice means no sections are required.
+	RequiredSections []string
 }
 
 // SchemaRule configures individual schema requirements.
@@ -107,7 +111,7 @@ type SectionSchema interface {
 	// (if any).
 	//
 	// nil can be returned if no parameters are required.
-	RequiredParams() map[string]struct{}
+	RequiredParams() []string
 
 	// OnParam returns a constructor function pointer
 	// and SchemaRule for the named parameter.
@@ -185,7 +189,7 @@ func (o *parser) parse(r io.Reader) error {
 		if withoutSpaces[0] == '[' {
 			if len(o.seenSections) == 0 {
 				// Global params finished.
-				for required := range o.rules.RequiredGlobalParams {
+				for _, required := range o.rules.RequiredGlobalParams {
 					_, hasIt := o.seenGlobals[required]
 					if !hasIt {
 						return fmt.Errorf("missing required global param: %q",
@@ -240,7 +244,7 @@ func (o *parser) parse(r io.Reader) error {
 		return err
 	}
 
-	for required := range o.rules.RequiredSections {
+	for _, required := range o.rules.RequiredSections {
 		_, hasIt := o.seenSections[required]
 		if !hasIt {
 			return fmt.Errorf("missing required section: %q", required)
@@ -272,7 +276,7 @@ func (o *parser) startSection(withoutSpaces []byte) error {
 		return err
 	}
 
-	newSectionFn, rule := o.schema.OnSection(mangledName)
+	newSectionFn, rule := o.schema.OnSection(mangledName, name)
 	if newSectionFn == nil {
 		if o.rules.AllowUnknownSections {
 			o.currSectionObj = nil
@@ -294,7 +298,7 @@ func (o *parser) startSection(withoutSpaces []byte) error {
 			o.line, rule.Limit, name, numInstances)
 	}
 
-	o.currSectionObj, err = newSectionFn(name)
+	o.currSectionObj, err = newSectionFn()
 	if err != nil {
 		return fmt.Errorf("line %d - failed to initialize section object: %q - %w",
 			o.line, name, err)
@@ -381,7 +385,7 @@ func (o *parser) validateCurrentSection() error {
 		return nil
 	}
 
-	for required := range o.currSectionObj.RequiredParams() {
+	for _, required := range o.currSectionObj.RequiredParams() {
 		_, hasIt := o.seenCurrSectionParams[required]
 		if !hasIt {
 			return fmt.Errorf("line %d - section %q is missing required param: %q",
