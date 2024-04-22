@@ -192,11 +192,11 @@ func (o *app) appErrorStatus(err error) {
 	o.statusChild.Show()
 }
 
-func newGameUI(game *appconfig.Game) *gameUI {
-	gui := &gameUI{
+func newProgramUI(program *appconfig.ProgramConfig) *programUI {
+	gui := &programUI{
 		// TODO: maybe use the INI header
-		runningMenu: systray.AddMenuItem(game.ExeName, ""),
-		errorMenu:   systray.AddMenuItem(game.ExeName, ":c"),
+		runningMenu: systray.AddMenuItem(program.General.ExeName, ""),
+		errorMenu:   systray.AddMenuItem(program.General.ExeName, ":c"),
 	}
 
 	gui.runningMenu.SetIcon(gameNotRunningIcon)
@@ -206,13 +206,13 @@ func newGameUI(game *appconfig.Game) *gameUI {
 	return gui
 }
 
-type gameUI struct {
+type programUI struct {
 	runningMenu  *systray.MenuItem
 	errorMenu    *systray.MenuItem
 	errorSubMenu *systray.MenuItem
 }
 
-func (o *gameUI) GameStarted(exename string) {
+func (o *programUI) GameStarted(exename string) {
 	log.Printf("connected to %s", exename)
 
 	o.runningMenu.SetIcon(gameRunningIcon)
@@ -221,7 +221,7 @@ func (o *gameUI) GameStarted(exename string) {
 	o.errorMenu.Hide()
 }
 
-func (o *gameUI) GameStopped(exename string, err error) {
+func (o *programUI) GameStopped(exename string, err error) {
 	log.Printf("disconnected from %s", exename)
 
 	if err != nil {
@@ -235,13 +235,13 @@ func (o *gameUI) GameStopped(exename string, err error) {
 	}
 }
 
-func (o *gameUI) hide() {
+func (o *programUI) hide() {
 	o.runningMenu.Hide()
 	o.errorMenu.Hide()
 	o.errorSubMenu.Hide()
 }
 
-func startApp(ctx context.Context) ([]*gameUI, <-chan error, error) {
+func startApp(ctx context.Context) ([]*programUI, <-chan error, error) {
 	user32, err := user32util.LoadUser32DLL()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
@@ -252,6 +252,7 @@ func startApp(ctx context.Context) ([]*gameUI, <-chan error, error) {
 		return nil, nil, fmt.Errorf("failed to get user home dir - %w", err)
 	}
 
+	// TODO: support multiple config files
 	configPath := filepath.Join(homeDir, "."+appName, "config.conf")
 	configFile, err := os.Open(configPath)
 	if err != nil {
@@ -265,29 +266,29 @@ func startApp(ctx context.Context) ([]*gameUI, <-chan error, error) {
 		return nil, nil, fmt.Errorf("failed to parse config - %w", err)
 	}
 
-	gameUIs := make([]*gameUI, len(config.Games))
-	gameRoutinesExited := make(chan error, len(config.Games))
+	gameUIs := make([]*programUI, len(config.Programs))
+	programRoutinesExited := make(chan error, len(config.Programs))
 
-	for i, game := range config.Games {
-		game := game
+	for i, program := range config.Programs {
+		program := program
 
-		gameUIs[i] = newGameUI(game)
+		gameUIs[i] = newProgramUI(program)
 
-		// TODO: write function that creates and starts game routine
-		gameRoutine := &gamectl.Routine{
-			Game:   game,
-			User32: user32,
-			Notif:  gameUIs[i],
+		// TODO: write function that creates and starts program routine
+		programRoutine := &gamectl.Routine{
+			Program: program,
+			User32:  user32,
+			Notif:   gameUIs[i],
 		}
 
-		gameRoutine.Start(ctx)
+		programRoutine.Start(ctx)
 
 		go func() {
-			<-gameRoutine.Done()
-			gameRoutinesExited <- fmt.Errorf("%s exited - %w",
-				game.ExeName, gameRoutine.Err())
+			<-programRoutine.Done()
+			programRoutinesExited <- fmt.Errorf("%s exited - %w",
+				program.General.ExeName, programRoutine.Err())
 		}()
 	}
 
-	return gameUIs, gameRoutinesExited, nil
+	return gameUIs, programRoutinesExited, nil
 }

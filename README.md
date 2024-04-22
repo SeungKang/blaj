@@ -44,7 +44,8 @@ Several examples of configuration files can be found in the [examples directory]
 
 ## Configuration File Example: Mirror's Edge
 
-Square brackets denote sections (e.g. `[General]`, `[SaveRestore]`).
+Section names are enclosed in square brackets, and must begin at the beginning
+of a line (e.g. `[General]`, `[SaveRestore]`).
 Data as key-value pairs are demarcated with an equals sign
 (e.g. `exeName = MirrorsEdge.exe`).
 

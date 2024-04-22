@@ -17,41 +17,105 @@ const (
 	dataParamSuffix         = "data"
 )
 
+// TODO: maybe remove this in the future
 func Parse(r io.Reader) (*Config, error) {
-	iniConfig, err := ini.Parse(r)
+	programConfig, err := parseProgramConfig(r)
 	if err != nil {
 		return nil, err
 	}
 
-	return FromINI(iniConfig)
-}
-
-func FromINI(iniConfig *ini.INI) (*Config, error) {
-	var games []*Game
-	for _, section := range iniConfig.Sections {
-		game, err := generalSection(section)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse game section: %q - %w", section.Name, err)
-		}
-
-		games = append(games, game)
-	}
-
-	if len(games) == 0 {
-		return nil, fmt.Errorf("no games provided")
-	}
-
-	return &Config{INI: iniConfig, Games: games}, nil
+	return &Config{
+		Programs: []*ProgramConfig{
+			programConfig,
+		},
+	}, nil
 }
 
 type Config struct {
-	INI   *ini.INI
-	Games []*Game
+	Programs []*ProgramConfig
+}
+
+func parseProgramConfig(r io.Reader) (*ProgramConfig, error) {
+	programConfig := &ProgramConfig{
+		Keybinds: make(map[byte][]interface{}),
+	}
+	err := ini.ParseSchema(r, programConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return programConfig, nil
+}
+
+type ProgramConfig struct {
+	General      *General
+	SaveRestores []*SaveRestore
+	Writers      []*Writer
+	Keybinds     map[byte][]interface{}
+}
+
+func (o *ProgramConfig) Rules() ini.ParserRules {
+	return ini.ParserRules{
+		LowercaseNames: true,
+		RequiredSections: []string{
+			"general",
+		},
+	}
+}
+
+func (o *ProgramConfig) OnGlobalParam(paramName string) (func(*ini.Param) error, ini.SchemaRule) {
+	return nil, ini.SchemaRule{}
+}
+
+func (o *ProgramConfig) OnSection(name string, actualName string) (func() (ini.SectionSchema, error), ini.SchemaRule) {
+	switch name {
+	case "general":
+		return func() (ini.SectionSchema, error) {
+			o.General = &General{}
+
+			return o.General, nil
+		}, ini.SchemaRule{Limit: 1}
+	case "saverestore":
+		return func() (ini.SectionSchema, error) {
+			saveRestore := &SaveRestore{
+				config: o,
+			}
+			o.SaveRestores = append(o.SaveRestores, saveRestore)
+
+			return saveRestore, nil
+		}, ini.SchemaRule{}
+	case "writer":
+		return func() (ini.SectionSchema, error) {
+			writer := &Writer{
+				config: o,
+			}
+			o.Writers = append(o.Writers, writer)
+
+			return writer, nil
+		}, ini.SchemaRule{}
+	default:
+		return nil, ini.SchemaRule{}
+	}
+}
+
+type sectionIndex struct {
+	index   int
+	section string
+}
+
+func (o *ProgramConfig) Validate() error {
+	return nil
 }
 
 type General struct {
 	ExeName  string
 	Disabled bool
+}
+
+func (o *General) RequiredParams() []string {
+	return []string{
+		"exename",
+	}
 }
 
 func (o *General) OnParam(name string) (func(param *ini.Param) error, ini.SchemaRule) {
@@ -78,45 +142,12 @@ func (o *General) OnParam(name string) (func(param *ini.Param) error, ini.Schema
 
 func (o *General) Validate() error {
 	//TODO: check if required params are set
+
 	return nil
 }
 
-func writerSection(section *ini.Section) (Writer, error) {
-	var pointers []Pointer
-	for _, param := range section.Params {
-		if strings.Contains(param.Name, writePointerParamSuffix) {
-			pointer, err := pointerFromParam(param)
-			if err != nil {
-				return Writer{}, fmt.Errorf("failed to parse pointer: %q - %w",
-					param.Name, err)
-			}
-
-			pointers = append(pointers, pointer)
-		}
-	}
-
-	if len(pointers) == 0 {
-		return Writer{}, fmt.Errorf("no pointers provided")
-	}
-
-	keybindStr, err := section.FirstParamValue("writeKeybind")
-	if err != nil {
-		return Writer{}, err
-	}
-
-	keybind, err := keybindFromStr(keybindStr)
-	if err != nil {
-		return Writer{}, fmt.Errorf("failed to parse keybind: %q - %w", keybindStr, err)
-	}
-
-	return Writer{
-		Pointers: pointers,
-		Keybind:  keybind,
-	}, nil
-}
-
 func readPointerFromParam(param *ini.Param) (Pointer, error) {
-	_, sizeStr, hasIt := strings.Cut(param.Name, readPointerParamSuffix)
+	_, sizeStr, hasIt := strings.Cut(strings.ToLower(param.Name), readPointerParamSuffix)
 	if !hasIt {
 		return Pointer{}, fmt.Errorf("pointer missing number of bytes to save")
 	}
@@ -188,46 +219,70 @@ type SaveRestore struct {
 	Pointers     []Pointer
 	SaveState    byte
 	RestoreState byte
+	config       *ProgramConfig
 }
 
-func (o *SaveRestore) AddParam(param *ini.Param) error {
-	switch v := strings.ToLower(param.Name); v {
-	case "savestate":
-		saveStateKeybind, err := keybindFromStr(param.Value)
-		if err != nil {
-			return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
-		}
-
-		o.SaveState = saveStateKeybind
-	case "restorestate":
-		restoreStateKeybind, err := keybindFromStr(param.Value)
-		if err != nil {
-			return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
-		}
-
-		o.RestoreState = restoreStateKeybind
-	default:
-		if !strings.Contains(v, readPointerParamSuffix) {
-			return fmt.Errorf("unknown parameter: %q", param.Name)
-		}
-
-		pointer, err := readPointerFromParam(param)
-		if err != nil {
-			return fmt.Errorf("failed to parse pointer: %q - %w",
-				param.Name, err)
-		}
-
-		o.Pointers = append(o.Pointers, pointer)
+func (o *SaveRestore) RequiredParams() []string {
+	return []string{
+		"savestate",
+		"restorestate",
 	}
+}
 
-	return nil
+func (o *SaveRestore) OnParam(name string) (func(param *ini.Param) error, ini.SchemaRule) {
+	switch {
+	case "savestate" == name:
+		return func(param *ini.Param) error {
+			saveStateKeybind, err := keybindFromStr(param.Value)
+			if err != nil {
+				return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
+			}
+
+			o.SaveState = saveStateKeybind
+			return nil
+		}, ini.SchemaRule{Limit: 1}
+	case "restorestate" == name:
+		return func(param *ini.Param) error {
+			restoreStateKeybind, err := keybindFromStr(param.Value)
+			if err != nil {
+				return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
+			}
+
+			o.RestoreState = restoreStateKeybind
+			return nil
+		}, ini.SchemaRule{Limit: 1}
+	case strings.Contains(name, readPointerParamSuffix):
+		return func(param *ini.Param) error {
+			pointer, err := readPointerFromParam(param)
+			if err != nil {
+				return fmt.Errorf("failed to parse pointer: %q - %w",
+					param.Name, err)
+			}
+
+			o.Pointers = append(o.Pointers, pointer)
+			return nil
+		}, ini.SchemaRule{}
+	default:
+		return nil, ini.SchemaRule{}
+	}
 }
 
 func (o *SaveRestore) Validate() error {
-	// TODO: validate other fields
 	if len(o.Pointers) == 0 {
 		return errors.New("no pointers were specified")
 	}
+
+	if o.SaveState == o.RestoreState {
+		return errors.New("cannot have duplicate keybind for saveState and restoreState")
+	}
+
+	bySaveKeybinds := o.config.Keybinds[o.SaveState]
+	bySaveKeybinds = append(bySaveKeybinds, o)
+	o.config.Keybinds[o.SaveState] = bySaveKeybinds
+
+	byRestoreKeybinds := o.config.Keybinds[o.RestoreState]
+	byRestoreKeybinds = append(byRestoreKeybinds, o)
+	o.config.Keybinds[o.RestoreState] = byRestoreKeybinds
 
 	return nil
 }
@@ -235,44 +290,59 @@ func (o *SaveRestore) Validate() error {
 type Writer struct {
 	Pointers map[string]WritePointer
 	Keybind  byte
-
-	currentWritePointer *WritePointer
+	config   *ProgramConfig
 }
 
-func (o *Writer) AddParam(param *ini.Param) error {
-	switch v := strings.ToLower(param.Name); v {
-	case "writekeybind":
-		keybind, err := keybindFromStr(param.Value)
-		if err != nil {
-			return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
-		}
+func (o *Writer) RequiredParams() []string {
+	return []string{
+		"writekeybind",
+	}
+}
 
-		o.Keybind = keybind
+func (o *Writer) OnParam(name string) (func(param *ini.Param) error, ini.SchemaRule) {
+	switch {
+	case "writekeybind" == name:
+		return func(param *ini.Param) error {
+			keybind, err := keybindFromStr(param.Value)
+			if err != nil {
+				return fmt.Errorf("failed to parse keybind: %q - %w", param.Value, err)
+			}
+
+			o.Keybind = keybind
+			return nil
+		}, ini.SchemaRule{Limit: 1}
+	case strings.HasSuffix(name, writePointerParamSuffix):
+		return func(param *ini.Param) error {
+
+			return o.addWriterPointer(param, name)
+		}, ini.SchemaRule{Limit: 1}
+	case strings.HasSuffix(name, dataParamSuffix):
+		return func(param *ini.Param) error {
+
+			return o.addData(param, name)
+		}, ini.SchemaRule{Limit: 1}
 	default:
-		if strings.Contains(param.Name, writePointerParamSuffix) {
+		return nil, ini.SchemaRule{}
+	}
+}
 
+func (o *Writer) Validate() error {
+	if len(o.Pointers) == 0 {
+		return fmt.Errorf("no pointers provided")
+	}
+
+	for name, writePointer := range o.Pointers {
+		err := writePointer.validate()
+		if err != nil {
+			return fmt.Errorf("failed to validate: %q - %w", name, err)
 		}
-
 	}
 
-	if len(pointers) == 0 {
-		return Writer{}, fmt.Errorf("no pointers provided")
-	}
+	byWriteKeybinds := o.config.Keybinds[o.Keybind]
+	byWriteKeybinds = append(byWriteKeybinds, o)
+	o.config.Keybinds[o.Keybind] = byWriteKeybinds
 
-	keybindStr, err := section.FirstParamValue("writeKeybind")
-	if err != nil {
-		return Writer{}, err
-	}
-
-	keybind, err := keybindFromStr(keybindStr)
-	if err != nil {
-		return Writer{}, fmt.Errorf("failed to parse keybind: %q - %w", keybindStr, err)
-	}
-
-	return Writer{
-		Pointers: pointers,
-		Keybind:  keybind,
-	}, nil
+	return nil
 }
 
 func (o *Writer) addWriterPointer(param *ini.Param, paramNameLC string) error {
@@ -320,40 +390,21 @@ func (o *Writer) addData(param *ini.Param, paramNameLC string) error {
 	return nil
 }
 
-//func (o *Writer) addWriterPointer(param *ini.Param) error {
-//	pointer, err := pointerFromParam(param)
-//	if err != nil {
-//		return fmt.Errorf("failed to parse pointer: %q - %w",
-//			param.Name, err)
-//	}
-//
-//	var target *WritePointer
-//	switch {
-//	case o.currentWritePointer == nil:
-//		o.currentWritePointer = &WritePointer{
-//			Pointer: pointer,
-//		}
-//	case o.currentWritePointer != nil && o.currentWritePointer.Pointer.Name == "":
-//		o.currentWritePointer.Pointer = pointer
-//		if len(o.currentWritePointer.Data) > 0 {
-//			o.Pointers = append(o.Pointers, *o.currentWritePointer)
-//			o.currentWritePointer = nil
-//		}
-//	case o.currentWritePointer != nil && o.currentWritePointer.Pointer.Name != "":
-//		return fmt.Errorf("")
-//	}
-//
-//	o.Pointers = append(o.Pointers)
-//}
-
-func (o *Writer) Validate() error {
-	//TODO implement me
-	panic("implement me")
-}
-
 type WritePointer struct {
 	Pointer Pointer
 	Data    []byte
+}
+
+func (o *WritePointer) validate() error {
+	if len(o.Pointer.Addrs) == 0 {
+		return errors.New("pointer not set")
+	}
+
+	if len(o.Data) == 0 {
+		return fmt.Errorf("write data not provided")
+	}
+
+	return nil
 }
 
 type Pointer struct {
