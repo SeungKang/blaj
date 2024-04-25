@@ -117,7 +117,7 @@ func (o *Routine) checkGameRunning() error {
 		return nil
 	}
 
-	runningGame, err := newRunningGameRoutine(o.Program, possiblePID, o.User32)
+	runningGame, err := newRunningProgramRoutine(o.Program, possiblePID, o.User32)
 	if err != nil {
 		return fmt.Errorf("failed to create new running game routine - %w", err)
 	}
@@ -131,21 +131,22 @@ func (o *Routine) checkGameRunning() error {
 }
 
 // TODO: make source file for running game stuff
-func newRunningGameRoutine(program *appconfig.ProgramConfig, pid int, dll *user32util.User32DLL) (*runningProgramRoutine, error) {
+func newRunningProgramRoutine(program *appconfig.ProgramConfig, pid int, dll *user32util.User32DLL) (*runningProgramRoutine, error) {
 	proc, err := kiwi.GetProcessByPID(pid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get process by PID - %w", err)
 	}
 
-	programStates := make(map[string]*gameState)
-	// TODO: support more than one saveRestore section
-	for _, pointer := range program.SaveRestores[0].Pointers {
-		programStates[pointer.Name] = &gameState{
-			pointer: pointer,
+	programStates := make(map[string]*programState)
+	for _, saveRestore := range program.SaveRestores {
+		for _, pointer := range saveRestore.Pointers {
+			programStates[pointer.Name] = &programState{
+				pointer: pointer,
+			}
 		}
 	}
 
-	runningGame := &runningProgramRoutine{
+	runningProgram := &runningProgramRoutine{
 		program: program,
 		proc:    proc,
 		states:  programStates,
@@ -154,48 +155,48 @@ func newRunningGameRoutine(program *appconfig.ProgramConfig, pid int, dll *user3
 
 	modules, err := kernel32.ProcessModules(syscall.Handle(proc.Handle))
 	if err != nil {
-		runningGame.Stop()
+		runningProgram.Stop()
 		return nil, fmt.Errorf("failed to get process modules - %w", err)
 	}
 
 	baseAddr, requiredModules, err := getRequiredModules(program, modules)
 	if err != nil {
-		runningGame.Stop()
+		runningProgram.Stop()
 		return nil, fmt.Errorf("failed to get required modules - %w", err)
 	}
 
-	runningGame.base = baseAddr
-	runningGame.mods = requiredModules
+	runningProgram.base = baseAddr
+	runningProgram.mods = requiredModules
 
 	is32Bit, err := kernel32.IsProcess32Bit(syscall.Handle(proc.Handle))
 	if err != nil {
-		runningGame.Stop()
+		runningProgram.Stop()
 		return nil, fmt.Errorf("failed to determine if process is 32 bit - %w", err)
 	}
-	runningGame.is32b = is32Bit
+	runningProgram.is32b = is32Bit
 
 	if is32Bit {
-		runningGame.addrFn = func(u uintptr) (uintptr, error) {
+		runningProgram.addrFn = func(u uintptr) (uintptr, error) {
 			data, err := proc.ReadUint32(u)
 			return uintptr(data), err
 		}
 	} else {
-		runningGame.addrFn = func(u uintptr) (uintptr, error) {
+		runningProgram.addrFn = func(u uintptr) (uintptr, error) {
 			data, err := proc.ReadUint64(u)
 			return uintptr(data), err
 		}
 	}
 
-	listener, err := user32util.NewLowLevelKeyboardListener(runningGame.handleKeyboardEvent, dll)
+	listener, err := user32util.NewLowLevelKeyboardListener(runningProgram.handleKeyboardEvent, dll)
 	if err != nil {
-		runningGame.Stop()
+		runningProgram.Stop()
 		return nil, fmt.Errorf("failed to create listener - %s", err.Error())
 	}
-	runningGame.ln = listener
+	runningProgram.ln = listener
 
 	process, err := os.FindProcess(int(proc.PID))
 	if err != nil {
-		runningGame.Stop()
+		runningProgram.Stop()
 		return nil, fmt.Errorf("failed to find process with PID: %d - %w", proc.PID, err)
 	}
 
@@ -205,7 +206,7 @@ func newRunningGameRoutine(program *appconfig.ProgramConfig, pid int, dll *user3
 			err = gameExitedNormallyErr
 		}
 
-		runningGame.exited(err)
+		runningProgram.exited(err)
 	}()
 
 	go func() {
@@ -214,10 +215,10 @@ func newRunningGameRoutine(program *appconfig.ProgramConfig, pid int, dll *user3
 			err = errors.New("listener exited without error")
 		}
 
-		runningGame.exited(err)
+		runningProgram.exited(err)
 	}()
 
-	return runningGame, nil
+	return runningProgram, nil
 }
 
 func getRequiredModules(program *appconfig.ProgramConfig, modules []kernel32.Module) (uintptr, map[string]kernel32.Module, error) {
@@ -263,7 +264,7 @@ type runningProgramRoutine struct {
 	mods    map[string]kernel32.Module
 	addrFn  func(uintptr) (uintptr, error)
 	proc    kiwi.Process
-	states  map[string]*gameState
+	states  map[string]*programState
 	once    sync.Once
 	ln      *user32util.LowLevelKeyboardEventListener
 	done    chan struct{}
@@ -309,27 +310,43 @@ func (o *runningProgramRoutine) handleKeyboardEventWithError(event user32util.Lo
 		return nil
 	}
 
-	switch event.Struct.VirtualKeyCode() {
-	// TODO: support more than one saveRestore section
-	case o.program.SaveRestores[0].SaveState:
-		for name, state := range o.states {
-			err := o.saveState(name, state)
-			if err != nil {
-				return fmt.Errorf("failed to get %s state at %+#v to 0x%x",
-					name, state.pointer, state.savedState)
-			}
-		}
-	// TODO: support more than one saveRestore section
-	case o.program.SaveRestores[0].RestoreState:
-		for name, state := range o.states {
-			if !state.stateSet {
-				continue
-			}
+	pressedKey := event.Struct.VirtualKeyCode()
+	sections, hasKeybind := o.program.Keybinds[pressedKey]
+	if !hasKeybind {
+		return nil
+	}
+	
+	for _, section := range sections {
+		switch v := section.(type) {
+		case *appconfig.SaveRestore:
+			switch pressedKey {
+			case v.SaveState:
+				for name, state := range o.states {
+					err := o.saveState(name, state)
+					if err != nil {
+						return fmt.Errorf("failed to get %s state at %+#v to 0x%x",
+							name, state.pointer, state.savedState)
+					}
+				}
+			case v.RestoreState:
+				for name, state := range o.states {
+					if !state.stateSet {
+						continue
+					}
 
-			err := o.restoreState(name, state)
-			if err != nil {
-				return fmt.Errorf("failed to restore %s state at %+#v to 0x%x",
-					name, state.pointer, state.savedState)
+					err := o.restoreState(name, state)
+					if err != nil {
+						return fmt.Errorf("failed to restore %s state at %+#v to 0x%x",
+							name, state.pointer, state.savedState)
+					}
+				}
+			}
+		case *appconfig.Writer:
+			for _, pointer := range v.Pointers {
+				err := o.write(pointer)
+				if err != nil {
+					return fmt.Errorf("failed to write to %s - %w", pointer.Pointer.Name, err)
+				}
 			}
 		}
 	}
@@ -337,9 +354,7 @@ func (o *runningProgramRoutine) handleKeyboardEventWithError(event user32util.Lo
 	return nil
 }
 
-func (o *runningProgramRoutine) saveState(name string, state *gameState) error {
-	// log.Printf("saving state %s at %+#v", name, state.pointer)
-
+func (o *runningProgramRoutine) saveState(name string, state *programState) error {
 	baseAddr := o.base
 	if state.pointer.OptModule != "" {
 		module, hasIt := o.mods[state.pointer.OptModule]
@@ -359,11 +374,9 @@ func (o *runningProgramRoutine) saveState(name string, state *gameState) error {
 	savedState, err := o.proc.ReadBytes(stateAddr, state.pointer.NBytes)
 	if err != nil {
 		// TODO update with INI name
-		return fmt.Errorf("error while trying to read from %s at 0x%x - %w",
+		return fmt.Errorf("failed to read from %s at 0x%x - %w",
 			name, stateAddr, err)
 	}
-
-	// log.Printf("saved state %s at %x as 0x%x", name, stateAddr, savedState)
 
 	state.savedState = savedState
 	state.stateSet = true
@@ -372,10 +385,7 @@ func (o *runningProgramRoutine) saveState(name string, state *gameState) error {
 	return nil
 }
 
-func (o *runningProgramRoutine) restoreState(name string, state *gameState) error {
-	//log.Printf("restoring state %s at %+#v to 0x%x",
-	//	name, state.pointer, state.savedState)
-
+func (o *runningProgramRoutine) restoreState(name string, state *programState) error {
 	baseAddr := o.base
 	if state.pointer.OptModule != "" {
 		module, hasIt := o.mods[state.pointer.OptModule]
@@ -394,7 +404,7 @@ func (o *runningProgramRoutine) restoreState(name string, state *gameState) erro
 
 	err = o.proc.WriteBytes(stateAddr, state.savedState)
 	if err != nil {
-		return fmt.Errorf("error while trying to write to %s at 0x%x - %w",
+		return fmt.Errorf("failed to write to %s at 0x%x - %w",
 			name, stateAddr, err)
 	}
 
@@ -410,7 +420,7 @@ func lookupAddr(base uintptr, ptr appconfig.Pointer, addrFn func(uintptr) (uintp
 
 	addr, err := addrFn(base + start)
 	if err != nil {
-		return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w",
+		return 0, fmt.Errorf("failed to read from target process at 0x%x - %w",
 			addr, err)
 	}
 
@@ -418,7 +428,7 @@ func lookupAddr(base uintptr, ptr appconfig.Pointer, addrFn func(uintptr) (uintp
 	for _, offset := range offsets[:len(offsets)-1] {
 		addr, err = addrFn(addr + offset)
 		if err != nil {
-			return 0, fmt.Errorf("error while trying to read from target process at 0x%x - %w",
+			return 0, fmt.Errorf("failed to read from target process at 0x%x - %w",
 				addr, err)
 		}
 	}
@@ -428,9 +438,37 @@ func lookupAddr(base uintptr, ptr appconfig.Pointer, addrFn func(uintptr) (uintp
 	return addr, nil
 }
 
-type gameState struct {
+func (o *runningProgramRoutine) write(pointer appconfig.WritePointer) error {
+	baseAddr := o.base
+	if pointer.Pointer.OptModule != "" {
+		module, hasIt := o.mods[pointer.Pointer.OptModule]
+		if !hasIt {
+			return fmt.Errorf("unknown module %q", pointer.Pointer.OptModule)
+		}
+
+		baseAddr = module.BaseAddr
+	}
+
+	writeAddr, err := lookupAddr(baseAddr, pointer.Pointer, o.addrFn)
+	if err != nil {
+		return fmt.Errorf("failed to lookup write address %s - %w",
+			pointer.Pointer.Name, err)
+	}
+
+	err = o.proc.WriteBytes(writeAddr, pointer.Data)
+	if err != nil {
+		// TODO update with INI name
+		return fmt.Errorf("failed to write bytes at %s (0x%x) - %w",
+			pointer.Pointer.Name, writeAddr, err)
+	}
+
+	log.Printf("wrote bytes at %s (0x%x)", pointer.Pointer.Name, writeAddr)
+
+	return nil
+}
+
+type programState struct {
 	pointer    appconfig.Pointer
 	stateSet   bool
 	savedState []byte
 }
-

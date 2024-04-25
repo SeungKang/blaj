@@ -80,7 +80,6 @@ func (o *ProgramConfig) OnSection(name string, actualName string) (func() (ini.S
 			saveRestore := &SaveRestore{
 				config: o,
 			}
-			o.SaveRestores = append(o.SaveRestores, saveRestore)
 
 			return saveRestore, nil
 		}, ini.SchemaRule{}
@@ -89,7 +88,6 @@ func (o *ProgramConfig) OnSection(name string, actualName string) (func() (ini.S
 			writer := &Writer{
 				config: o,
 			}
-			o.Writers = append(o.Writers, writer)
 
 			return writer, nil
 		}, ini.SchemaRule{}
@@ -216,6 +214,7 @@ type Game struct {
 }
 
 type SaveRestore struct {
+	// TODO: make Pointers into a map
 	Pointers     []Pointer
 	SaveState    byte
 	RestoreState byte
@@ -261,7 +260,7 @@ func (o *SaveRestore) OnParam(name string) (func(param *ini.Param) error, ini.Sc
 
 			o.Pointers = append(o.Pointers, pointer)
 			return nil
-		}, ini.SchemaRule{}
+		}, ini.SchemaRule{Limit: 1}
 	default:
 		return nil, ini.SchemaRule{}
 	}
@@ -275,6 +274,18 @@ func (o *SaveRestore) Validate() error {
 	if o.SaveState == o.RestoreState {
 		return errors.New("cannot have duplicate keybind for saveState and restoreState")
 	}
+
+	for _, pointer := range o.Pointers {
+		for _, saveRestore := range o.config.SaveRestores {
+			for _, otherPointer := range saveRestore.Pointers {
+				if pointer.Name == otherPointer.Name {
+					return fmt.Errorf("%q is already declared in a previous section", pointer.Name)
+				}
+			}
+		}
+	}
+
+	o.config.SaveRestores = append(o.config.SaveRestores, o)
 
 	bySaveKeybinds := o.config.Keybinds[o.SaveState]
 	bySaveKeybinds = append(bySaveKeybinds, o)
@@ -336,7 +347,16 @@ func (o *Writer) Validate() error {
 		if err != nil {
 			return fmt.Errorf("failed to validate: %q - %w", name, err)
 		}
+
+		for _, writer := range o.config.Writers {
+			_, hasIt := writer.Pointers[name]
+			if hasIt {
+				return fmt.Errorf("%q is already declared in a previous section", name)
+			}
+		}
 	}
+
+	o.config.Writers = append(o.config.Writers, o)
 
 	byWriteKeybinds := o.config.Keybinds[o.Keybind]
 	byWriteKeybinds = append(byWriteKeybinds, o)
