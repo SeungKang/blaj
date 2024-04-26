@@ -315,29 +315,33 @@ func (o *runningProgramRoutine) handleKeyboardEventWithError(event user32util.Lo
 	if !hasKeybind {
 		return nil
 	}
-	
+
 	for _, section := range sections {
 		switch v := section.(type) {
 		case *appconfig.SaveRestore:
 			switch pressedKey {
 			case v.SaveState:
-				for name, state := range o.states {
-					err := o.saveState(name, state)
+				for _, pointer := range v.Pointers {
+					state, hasIt := o.states[pointer.Name]
+					if !hasIt {
+						continue
+					}
+					err := o.saveState(pointer.Name, state)
 					if err != nil {
 						return fmt.Errorf("failed to get %s state at %+#v to 0x%x",
-							name, state.pointer, state.savedState)
+							pointer.Name, pointer, state.savedState)
 					}
 				}
 			case v.RestoreState:
-				for name, state := range o.states {
-					if !state.stateSet {
+				for _, pointer := range v.Pointers {
+					state, hasIt := o.states[pointer.Name]
+					if !hasIt || !state.stateSet {
 						continue
 					}
-
-					err := o.restoreState(name, state)
+					err := o.restoreState(pointer.Name, state)
 					if err != nil {
 						return fmt.Errorf("failed to restore %s state at %+#v to 0x%x",
-							name, state.pointer, state.savedState)
+							pointer.Name, state.pointer, state.savedState)
 					}
 				}
 			}
