@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -17,18 +18,21 @@ const (
 	dataParamSuffix         = "data"
 )
 
-// TODO: maybe remove this in the future
-func Parse(r io.Reader) (*Config, error) {
-	programConfig, err := parseProgramConfig(r)
+// TODO: check that we are not parsing disabled configs
+func ProgramConfigFromPath(filePath string) (*ProgramConfig, error) {
+	configFile, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open config file - %w", err)
+	}
+	defer configFile.Close()
+
+	config, err := parseProgramConfig(configFile)
+	configFile.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config - %w", err)
 	}
 
-	return &Config{
-		Programs: []*ProgramConfig{
-			programConfig,
-		},
-	}, nil
+	return config, nil
 }
 
 type Config struct {

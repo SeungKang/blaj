@@ -137,6 +137,7 @@ func newRunningProgramRoutine(program *appconfig.ProgramConfig, pid int, dll *us
 		return nil, fmt.Errorf("failed to get process by PID - %w", err)
 	}
 
+	// TODO: changing to be map[*appconfig.pointer]*programState
 	programStates := make(map[string]*programState)
 	for _, saveRestore := range program.SaveRestores {
 		for _, pointer := range saveRestore.Pointers {

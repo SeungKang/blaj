@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -252,24 +253,33 @@ func startApp(ctx context.Context) ([]*programUI, <-chan error, error) {
 		return nil, nil, fmt.Errorf("failed to get user home dir - %w", err)
 	}
 
-	// TODO: support multiple config files
-	configPath := filepath.Join(homeDir, "."+appName, "config.conf")
-	configFile, err := os.Open(configPath)
+	configDir := filepath.Join(homeDir, "."+appName)
+	pathInfos, err := os.ReadDir(configDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open config file - %w", err)
-	}
-	defer configFile.Close()
-
-	config, err := appconfig.Parse(configFile)
-	configFile.Close()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse config - %w", err)
+		return nil, nil, fmt.Errorf("failed to read config directory - %w", err)
 	}
 
-	gameUIs := make([]*programUI, len(config.Programs))
-	programRoutinesExited := make(chan error, len(config.Programs))
+	var programConfigs []*appconfig.ProgramConfig
+	for _, pathInfo := range pathInfos {
+		if pathInfo.IsDir() {
+			continue
+		}
 
-	for i, program := range config.Programs {
+		if strings.HasSuffix(pathInfo.Name(), ".conf") {
+			configPath := filepath.Join(configDir, pathInfo.Name())
+			programConfig, err := appconfig.ProgramConfigFromPath(configPath)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create program config from path - %w", err)
+			}
+
+			programConfigs = append(programConfigs, programConfig)
+		}
+	}
+
+	gameUIs := make([]*programUI, len(programConfigs))
+	programRoutinesExited := make(chan error, len(programConfigs))
+
+	for i, program := range programConfigs {
 		program := program
 
 		gameUIs[i] = newProgramUI(program)
