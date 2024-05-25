@@ -21,21 +21,34 @@ import (
 
 const appName = "blaj"
 
-var (
-	//go:embed icons/shark_blue.ico
-	sharkBlue []byte
+// systray icon
+// blue: if no games found
+// green: if at least one game found
+// red: if there is any errors
 
+// game icon
+// blue: if checking for game
+// green: if game found
+// red: if error
+
+var (
 	//go:embed icons/shark_red.ico
-	sharkRed []byte
+	systrayRedIco []byte
+
+	//go:embed icons/shark_blue.ico
+	systrayBlueIco []byte
+
+	//go:embed icons/shark_green.ico
+	systrayGreenIco []byte
 
 	//go:embed icons/shark_red_white.ico
-	gameErrorIcon []byte
+	statusErrorIcon []byte
 
 	//go:embed icons/shark_blue_white.ico
-	gameNotRunningIcon []byte
+	statusCheckingIcon []byte
 
 	//go:embed icons/shark_green_white.ico
-	gameRunningIcon []byte
+	statusRunningIcon []byte
 )
 
 func main() {
@@ -44,23 +57,27 @@ func main() {
 }
 
 type app struct {
-	status      *systray.MenuItem
-	statusChild *systray.MenuItem
-	mu          sync.Mutex
-	lastAppErr  error
+	statusChecking *systray.MenuItem
+	statusRunning  *systray.MenuItem
+	statusError    *systray.MenuItem
+	statusChild    *systray.MenuItem
+	mu             sync.Mutex
+	lastAppErr     error
 	// TODO: use INI header as key
 	games map[string]error
 }
 
 func (o *app) ready() {
 	systray.SetTitle(appName)
-	systray.SetIcon(sharkBlue)
+	systray.SetIcon(systrayBlueIco)
 
 	systray.AddMenuItem(appName, "").Disable()
 	systray.AddSeparator()
-	o.status = systray.AddMenuItem("Status", "Application status")
-	o.statusChild = o.status.AddSubMenuItem("", "")
-	o.statusChild.Hide()
+	o.statusChecking = systray.AddMenuItem("Status: Checking for games", "Application status")
+	o.statusRunning = systray.AddMenuItem("Status: Running", "Application status")
+	o.statusError = systray.AddMenuItem("Status: Error", "Application status")
+	o.statusChild = o.statusError.AddSubMenuItem("", "")
+	o.setChecking()
 
 	quit := systray.AddMenuItem("Quit", "Quit the application")
 	systray.AddSeparator()
@@ -80,19 +97,38 @@ func (o *app) ready() {
 	go o.loop(ctx)
 }
 
+func (o *app) setChecking() {
+	o.statusError.Show()
+	o.statusRunning.Hide()
+	o.statusError.Hide()
+	systray.SetIcon(systrayBlueIco)
+}
+
+func (o *app) setRunning() {
+	o.statusRunning.Show()
+	o.statusChecking.Hide()
+	o.statusError.Hide()
+	systray.SetIcon(systrayGreenIco)
+}
+
+func (o *app) setError(err error) {
+	o.statusError.Show()
+	o.statusRunning.Hide()
+	o.statusChecking.Hide()
+	o.statusChild.Show()
+	o.statusChild.SetTitle(err.Error())
+	systray.SetIcon(systrayRedIco)
+}
+
 func (o *app) loop(ctx context.Context) {
 	for {
 		gameCtx, cancelGameCtxFn := context.WithCancel(ctx)
 		defer cancelGameCtxFn()
 
-		gameUIs, gameErrors, err := startApp(gameCtx)
+		programUIs, gameErrors, err := startApp(gameCtx, o)
 		if err != nil {
 			goto onGameExit
 		}
-
-		o.status.SetTitle("Status: running")
-		systray.SetIcon(sharkBlue)
-		o.statusChild.Hide()
 
 		select {
 		case <-ctx.Done():
@@ -105,10 +141,7 @@ func (o *app) loop(ctx context.Context) {
 		cancelGameCtxFn()
 
 		if err != nil {
-			o.status.SetTitle("Status: error")
-			systray.SetIcon(sharkRed)
-			o.statusChild.SetTitle(err.Error())
-			o.statusChild.Show()
+			o.setError(err)
 		}
 
 		select {
@@ -116,7 +149,7 @@ func (o *app) loop(ctx context.Context) {
 			log.Printf("app loop exited - %s", ctx.Err())
 			return
 		case <-time.After(5 * time.Second):
-			for _, ui := range gameUIs {
+			for _, ui := range programUIs {
 				ui.hide()
 			}
 
@@ -139,12 +172,10 @@ func (o *app) gameErroredStatus(exename string, err error) {
 
 	o.games[exename] = err
 	if o.lastAppErr == nil {
-		o.status.SetTitle("Status: error")
-		o.statusChild.Show()
-		o.statusChild.SetTitle(err.Error())
+		o.setError(err)
 	}
 
-	systray.SetIcon(sharkRed)
+	systray.SetIcon(systrayRedIco)
 }
 
 func (o *app) gameOkStatus(exename string) {
@@ -162,7 +193,7 @@ func (o *app) gameOkStatus(exename string) {
 		}
 	}
 
-	systray.SetIcon(sharkBlue)
+	o.setChecking()
 }
 
 func (o *app) appRunningStatus() {
@@ -176,9 +207,7 @@ func (o *app) appRunningStatus() {
 		}
 	}
 
-	o.status.SetTitle("Status: running")
-	systray.SetIcon(sharkBlue)
-	o.statusChild.Hide()
+	o.setRunning()
 }
 
 func (o *app) appErrorStatus(err error) {
@@ -187,20 +216,18 @@ func (o *app) appErrorStatus(err error) {
 
 	o.lastAppErr = err
 
-	o.status.SetTitle("Status: error")
-	systray.SetIcon(sharkRed)
-	o.statusChild.SetTitle(err.Error())
-	o.statusChild.Show()
+	o.setError(err)
 }
 
-func newProgramUI(program *appconfig.ProgramConfig) *programUI {
+func newProgramUI(program *appconfig.ProgramConfig, parent *app) *programUI {
 	gui := &programUI{
 		// TODO: maybe use the INI header
+		app:         parent,
 		runningMenu: systray.AddMenuItem(program.General.ExeName, ""),
 		errorMenu:   systray.AddMenuItem(program.General.ExeName, ":c"),
 	}
 
-	gui.runningMenu.SetIcon(gameNotRunningIcon)
+	gui.runningMenu.SetIcon(statusCheckingIcon)
 	gui.errorSubMenu = gui.errorMenu.AddSubMenuItem("", "")
 	gui.errorMenu.Hide()
 
@@ -208,6 +235,7 @@ func newProgramUI(program *appconfig.ProgramConfig) *programUI {
 }
 
 type programUI struct {
+	app          *app
 	runningMenu  *systray.MenuItem
 	errorMenu    *systray.MenuItem
 	errorSubMenu *systray.MenuItem
@@ -216,7 +244,9 @@ type programUI struct {
 func (o *programUI) GameStarted(exename string) {
 	log.Printf("connected to %s", exename)
 
-	o.runningMenu.SetIcon(gameRunningIcon)
+	o.app.setRunning()
+
+	o.runningMenu.SetIcon(statusRunningIcon)
 	o.runningMenu.Show()
 
 	o.errorMenu.Hide()
@@ -226,13 +256,11 @@ func (o *programUI) GameStopped(exename string, err error) {
 	log.Printf("disconnected from %s", exename)
 
 	if err != nil {
-		o.errorMenu.SetIcon(gameErrorIcon)
-		o.errorMenu.Show()
-		o.errorSubMenu.SetTitle(err.Error())
+		o.app.setError(err)
 
 		o.runningMenu.Hide()
 	} else {
-		o.runningMenu.SetIcon(gameNotRunningIcon)
+		o.runningMenu.SetIcon(statusCheckingIcon)
 	}
 }
 
@@ -242,7 +270,7 @@ func (o *programUI) hide() {
 	o.errorSubMenu.Hide()
 }
 
-func startApp(ctx context.Context) ([]*programUI, <-chan error, error) {
+func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, error) {
 	user32, err := user32util.LoadUser32DLL()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
@@ -282,7 +310,7 @@ func startApp(ctx context.Context) ([]*programUI, <-chan error, error) {
 	for i, program := range programConfigs {
 		program := program
 
-		gameUIs[i] = newProgramUI(program)
+		gameUIs[i] = newProgramUI(program, parent)
 
 		// TODO: write function that creates and starts program routine
 		programRoutine := &gamectl.Routine{
