@@ -18,7 +18,6 @@ const (
 	dataParamSuffix         = "data"
 )
 
-// TODO: check that we are not parsing disabled configs
 func ProgramConfigFromPath(filePath string) (*ProgramConfig, error) {
 	configFile, err := os.Open(filePath)
 	if err != nil {

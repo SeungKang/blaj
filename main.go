@@ -222,6 +222,11 @@ func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, err
 				return nil, nil, fmt.Errorf("failed to create program config from path - %w", err)
 			}
 
+			if programConfig.General.Disabled {
+				log.Printf("%s set to disabled", pathInfo.Name())
+				continue
+			}
+
 			programConfigs = append(programConfigs, programConfig)
 		}
 	}
