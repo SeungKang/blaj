@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -57,14 +56,7 @@ func main() {
 }
 
 type app struct {
-	statusChecking *systray.MenuItem
-	statusRunning  *systray.MenuItem
-	statusError    *systray.MenuItem
-	statusChild    *systray.MenuItem
-	mu             sync.Mutex
-	lastAppErr     error
-	// TODO: use INI header as key
-	games map[string]error
+	errorLog *logUI
 }
 
 func (o *app) ready() {
@@ -73,10 +65,7 @@ func (o *app) ready() {
 
 	systray.AddMenuItem(appName, "").Disable()
 	systray.AddSeparator()
-	o.statusChecking = systray.AddMenuItem("Status: Checking for games", "Application status")
-	o.statusRunning = systray.AddMenuItem("Status: Running", "Application status")
-	o.statusError = systray.AddMenuItem("Status: Error", "Application status")
-	o.statusChild = o.statusError.AddSubMenuItem("", "")
+	o.errorLog = newLogUI("Error Log")
 	o.setChecking()
 
 	quit := systray.AddMenuItem("Quit", "Quit the application")
@@ -98,25 +87,14 @@ func (o *app) ready() {
 }
 
 func (o *app) setChecking() {
-	o.statusError.Show()
-	o.statusRunning.Hide()
-	o.statusError.Hide()
 	systray.SetIcon(systrayBlueIco)
 }
 
 func (o *app) setRunning() {
-	o.statusRunning.Show()
-	o.statusChecking.Hide()
-	o.statusError.Hide()
 	systray.SetIcon(systrayGreenIco)
 }
 
 func (o *app) setError(err error) {
-	o.statusError.Show()
-	o.statusRunning.Hide()
-	o.statusChecking.Hide()
-	o.statusChild.Show()
-	o.statusChild.SetTitle(err.Error())
 	systray.SetIcon(systrayRedIco)
 }
 
@@ -162,63 +140,6 @@ func (o *app) exit() {
 	systray.Quit()
 }
 
-func (o *app) gameErroredStatus(exename string, err error) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	if o.games == nil {
-		o.games = make(map[string]error)
-	}
-
-	o.games[exename] = err
-	if o.lastAppErr == nil {
-		o.setError(err)
-	}
-
-	systray.SetIcon(systrayRedIco)
-}
-
-func (o *app) gameOkStatus(exename string) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	if o.games == nil {
-		o.games = make(map[string]error)
-	}
-
-	o.games[exename] = nil
-	for _, err := range o.games {
-		if err != nil {
-			return
-		}
-	}
-
-	o.setChecking()
-}
-
-func (o *app) appRunningStatus() {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	o.lastAppErr = nil
-	for _, err := range o.games {
-		if err != nil {
-			return
-		}
-	}
-
-	o.setRunning()
-}
-
-func (o *app) appErrorStatus(err error) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	o.lastAppErr = err
-
-	o.setError(err)
-}
-
 func newProgramUI(program *appconfig.ProgramConfig, parent *app) *programUI {
 	gui := &programUI{
 		// TODO: maybe use the INI header
@@ -257,6 +178,7 @@ func (o *programUI) GameStopped(exename string, err error) {
 
 	if err != nil {
 		o.app.setError(err)
+		o.app.errorLog.addEntry(exename + ": " + err.Error())
 
 		o.runningMenu.Hide()
 	} else {
@@ -329,4 +251,24 @@ func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, err
 	}
 
 	return gameUIs, programRoutinesExited, nil
+}
+
+func newLogUI(menuItemName string) *logUI {
+	return &logUI{parent: systray.AddMenuItem(menuItemName, "")}
+}
+
+type logUI struct {
+	parent  *systray.MenuItem
+	entries []*systray.MenuItem
+}
+
+func (o *logUI) addEntry(message string) {
+	// TODO: make more efficient
+	newEntry := o.parent.AddSubMenuItem(message, "")
+	if len(o.entries) == 5 {
+		o.entries[0].Hide()
+		o.entries = append(o.entries[1:], newEntry)
+	} else {
+		o.entries = append(o.entries, newEntry)
+	}
 }
