@@ -86,7 +86,7 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 				if errors.Is(o.current.Err(), gameExitedNormallyErr) {
 					o.Notif.GameStopped(o.Program.General.ExeName, nil)
 				} else {
-					o.Notif.GameStopped(o.Program.General.ExeName, o.Err())
+					o.Notif.GameStopped(o.Program.General.ExeName, o.current.Err())
 				}
 			}
 
