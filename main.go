@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -60,10 +61,15 @@ type app struct {
 }
 
 func (o *app) ready() {
-	systray.SetTitle(appName)
+	var version string
+	buildInfo, ok := debug.ReadBuildInfo()
+	if ok {
+		version = buildInfo.Main.Version
+	}
+	systray.SetTitle(appName + " " + version)
 	systray.SetIcon(systrayBlueIco)
 
-	systray.AddMenuItem(appName, "").Disable()
+	systray.AddMenuItem(appName+" "+version, "").Disable()
 	systray.AddSeparator()
 	o.errorLog = newLogUI("Error Log")
 	o.setChecking()
