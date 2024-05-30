@@ -10,7 +10,7 @@ permissions:
   checks: none
   contents: write
   deployments: none
-  id-token: none
+  id-token: write
   issues: none
   discussions: none
   packages: none
