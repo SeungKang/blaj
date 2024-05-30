@@ -29,7 +29,7 @@ jobs:
       - name: go build
         id: build
         run: |
-          GOOS=windows go build
+          GOOS=windows go build -ldflags -H=windowsgui
           echo "exe_path=blaj.exe" >> "${GITHUB_OUTPUT}"
           echo "exe_name=blaj.exe" >> "${GITHUB_OUTPUT}"
 
