@@ -138,3 +138,13 @@ state keybind to the keyboard key `p`.
 ## Requirements
 
 - `blaj` is made for Windows machines
+
+## Installation
+
+```console
+$ cosign verify-blob ~/Downloads/blaj.exe \
+  --bundle ~/Downloads/cosign.bundle \
+  --certificate-identity=https://github.com/SeungKang/blaj/.github/workflows/build.yaml@refs/tags/test4 \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+Verified OK
+```
