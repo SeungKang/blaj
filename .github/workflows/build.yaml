@@ -39,6 +39,16 @@ jobs:
           path: ${{ steps.build.outputs.exe_path}}
           if-no-files-found: error
 
+      - uses: sigstore/cosign-installer@v3.5.0
+        if: github.event_name == 'release'
+
+      - name: sign exe
+        id: sign
+        if: github.event_name == 'release'
+        run: |
+          cosign.exe sign-blob ${{ steps.build.outputs.exe_path}} --yes --bundle consign.bundle
+          echo "cosign_bundle=cosign.bundle" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/upload-release-asset@v1
         if: github.event_name == 'release'
         env:
@@ -47,4 +57,14 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ${{ steps.build.outputs.exe_path}}
           asset_name: ${{ steps.build.outputs.exe_name}}
+          asset_content_type: 'application/x-tar'
+
+      - uses: actions/upload-release-asset@v1
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.sign.outputs.cosign_bundle}}
+          asset_name: cosign.bundle
           asset_content_type: 'application/x-tar'
