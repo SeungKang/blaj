@@ -1,0 +1,49 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+permissions:
+  actions: none
+  checks: none
+  contents: write
+  deployments: none
+  id-token: none
+  issues: none
+  discussions: none
+  packages: none
+  pull-requests: none
+  repository-projects: none
+  security-events: none
+  statuses: none
+jobs:
+  build:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        id: checkout_code
+
+      - name: go build
+        id: build
+        run: |
+          GOOS=windows go build
+          echo "exe_path=blaj.exe" >> "${GITHUB_OUTPUT}"
+          echo "exe_name=blaj.exe" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.build.outputs.exe_name}}
+          path: ${{ steps.build.outputs.exe_path}}
+          if-no-files-found: error
+
+      - uses: actions/upload-release-asset@v1
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.build.outputs.exe_path}}
+          asset_name: ${{ steps.build.outputs.exe_name}}
+          asset_content_type: 'application/x-tar'
