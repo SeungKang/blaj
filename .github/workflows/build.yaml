@@ -46,7 +46,7 @@ jobs:
         id: sign
         if: github.event_name == 'release'
         run: |
-          cosign sign-blob ${{ steps.build.outputs.exe_path}} --yes --bundle consign.bundle
+          cosign sign-blob ${{ steps.build.outputs.exe_path}} --yes --bundle cosign.bundle
           echo "cosign_bundle=cosign.bundle" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/upload-release-asset@v1
