@@ -64,8 +64,14 @@ func (o *app) ready() {
 	var version string
 	buildInfo, ok := debug.ReadBuildInfo()
 	if ok {
-		version = buildInfo.Main.Version
+		for _, setting := range buildInfo.Settings {
+			if setting.Key == "vcs.revision" {
+				version = setting.Value
+				break
+			}
+		}
 	}
+
 	systray.SetTitle(appName + " " + version)
 	systray.SetIcon(systrayBlueIco)
 
