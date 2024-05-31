@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -49,6 +48,8 @@ var (
 
 	//go:embed icons/shark_green_white.ico
 	statusRunningIcon []byte
+
+	version string
 )
 
 func main() {
@@ -61,17 +62,6 @@ type app struct {
 }
 
 func (o *app) ready() {
-	var version string
-	buildInfo, ok := debug.ReadBuildInfo()
-	if ok {
-		for _, setting := range buildInfo.Settings {
-			if setting.Key == "vcs.revision" {
-				version = setting.Value
-				break
-			}
-		}
-	}
-
 	systray.SetTitle(appName + " " + version)
 	systray.SetIcon(systrayBlueIco)
 

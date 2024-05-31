@@ -29,7 +29,7 @@ jobs:
       - name: go build
         id: build
         run: |
-          GOOS=windows go build -ldflags -H=windowsgui
+          GOOS=windows go build -ldflags "-H=windowsgui -X main.version=${{ github.ref_name }}"
           echo "exe_path=blaj.exe" >> "${GITHUB_OUTPUT}"
           echo "exe_name=blaj.exe" >> "${GITHUB_OUTPUT}"
 
@@ -46,7 +46,7 @@ jobs:
         id: sign
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          cosign sign-blob ${{ steps.build.outputs.exe_path}} --yes --bundle cosign.bundle
+          cosign sign-blob ${{ steps.build.outputs.exe_path }} --yes --bundle cosign.bundle
           echo "cosign_bundle=cosign.bundle" >> "${GITHUB_OUTPUT}"
 
       - name: release
