@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -139,6 +140,13 @@ func (o *app) loop(ctx context.Context) {
 }
 
 func (o *app) exit() {
+	if log.Writer() != os.Stderr {
+		closer, ok := log.Writer().(io.Closer)
+		if ok {
+			closer.Close()
+		}
+	}
+
 	systray.Quit()
 }
 
@@ -195,17 +203,34 @@ func (o *programUI) hide() {
 }
 
 func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, error) {
-	user32, err := user32util.LoadUser32DLL()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
-	}
-
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get user home dir - %w", err)
 	}
 
 	configDir := filepath.Join(homeDir, "."+appName)
+	err = os.MkdirAll(configDir, 0o700)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to make config directory at '%s' - %w", configDir, err)
+	}
+
+	if log.Writer() == os.Stderr && version != "" {
+		logFile, err := os.OpenFile(
+			filepath.Join(configDir, appName+".log"),
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+			0o600)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to open log file - %w", err)
+		}
+
+		log.SetOutput(logFile)
+	}
+
+	user32, err := user32util.LoadUser32DLL()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load user32.dll - %s", err.Error())
+	}
+
 	pathInfos, err := os.ReadDir(configDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config directory - %w", err)
@@ -231,6 +256,10 @@ func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, err
 
 			programConfigs = append(programConfigs, programConfig)
 		}
+	}
+
+	if len(programConfigs) == 0 {
+		return nil, nil, fmt.Errorf("no .conf files found in %s", configDir)
 	}
 
 	gameUIs := make([]*programUI, len(programConfigs))
