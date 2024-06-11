@@ -393,7 +393,12 @@ func (o *Writer) addWriterPointer(param *ini.Param, paramNameLC string) error {
 
 // TODO: support spaces (strings.fields)
 func (o *Writer) addData(param *ini.Param, paramNameLC string) error {
-	data, err := hex.DecodeString(strings.TrimPrefix(param.Value, "0x"))
+	value := strings.TrimPrefix(param.Value, "0x")
+	if len(value)%2 == 1 {
+		value = "0" + value
+	}
+
+	data, err := hex.DecodeString(value)
 	if err != nil {
 		return fmt.Errorf("failed to decode data - %w", err)
 	}
