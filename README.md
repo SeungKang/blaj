@@ -74,7 +74,8 @@ keybind = 5
 
 ## [General]
 
-The [General] section is required and there should be only one entry per configuration.
+The [General] section defines the `exeName` and whether the configuration file is `disabled`.
+The section is required and there should be only one entry per configuration.
 
 ### `exeName`
 
@@ -104,7 +105,7 @@ This section is optional and can have multiple entries per configuration.
 
 The size and the location of the memory to save/restore.
 
-### Pointer_# example
+### Pointer_# Example
 
 ```
 xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
@@ -113,7 +114,7 @@ xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
 |      |    |          |            |
 |      |    |          |            |__ the offset from the module base address in hexidecimal (required)
 |      |    |          |
-|      |    |          |__ the module to use as the base address (optional)
+|      |    |          |__ the module to use as the base address, default is the exeName (optional)
 |      |    |
 |      |    |__ indicates to save 4 bytes (32 bits) at the memory location specified by the right of the equal sign
 |      |
@@ -126,12 +127,15 @@ Can be prefixed with any name but must ends with `Pointer_#` where `#` is the nu
 to save/restore (e.g. `xCamPointer_4 = 0x01C47590 0x70 0xF8`). You can specify more
 than one `Pointer_#` parameter in the `[SaveRestore]` section.
 
-Optional: Indicate name of a module to use as the base address of the pointer.
-If omitted, the base address of the `exeName` will be used.
+By default, the base address of the `exeName` will be used. To use a different
+module as the base address, the module's name can be included after the equal sign.
 
-### Implementing a Cheat Engine pointer
+#### Implementing a Cheat Engine pointer
 
-Cheat Engine expresses a pointer as a base address with a series of offsets.
+Cheat Engine pointers are expressed as a base address with a series of offsets.
+A pointer in the `blaj` configuration file can be defined by listing these offsets space delimited.
+
+![cheat_engine_pointer.gif](cheat_engine_pointer.gif)
 
 ### `saveState` and `restoreState`
 
