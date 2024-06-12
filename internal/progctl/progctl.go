@@ -1,4 +1,4 @@
-package gamectl
+package progctl
 
 import (
 	"context"
@@ -19,12 +19,12 @@ import (
 )
 
 var (
-	gameExitedNormallyErr = errors.New("game exited without error")
+	programExitedNormallyErr = errors.New("program exited without error")
 )
 
 type Notifier interface {
-	GameStarted(exename string)
-	GameStopped(exename string, err error)
+	ProgramStarted(exename string)
+	ProgramStopped(exename string, err error)
 }
 
 type Routine struct {
@@ -74,19 +74,19 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.timer.C:
-			err := o.checkGameRunning()
+			err := o.checkProgramRunning()
 			if err != nil {
-				return fmt.Errorf("failed to handle game startup for %s - %w", o.Program.General.ExeName, err)
+				return fmt.Errorf("failed to handle program startup for %s - %w", o.Program.General.ExeName, err)
 			}
 		case <-o.current.Done():
 			log.Printf("%s routine exited - %s", o.Program.General.ExeName, o.current.Err())
 			o.timer.Reset(5 * time.Second)
 
 			if o.Notif != nil {
-				if errors.Is(o.current.Err(), gameExitedNormallyErr) {
-					o.Notif.GameStopped(o.Program.General.ExeName, nil)
+				if errors.Is(o.current.Err(), programExitedNormallyErr) {
+					o.Notif.ProgramStopped(o.Program.General.ExeName, nil)
 				} else {
-					o.Notif.GameStopped(o.Program.General.ExeName, o.current.Err())
+					o.Notif.ProgramStopped(o.Program.General.ExeName, o.current.Err())
 				}
 			}
 
@@ -95,9 +95,9 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 	}
 }
 
-func (o *Routine) checkGameRunning() error {
+func (o *Routine) checkProgramRunning() error {
 	// TODO: logger to make prefix with exename
-	log.Printf("checking for game running with exe name: %s", o.Program.General.ExeName)
+	log.Printf("checking for program running with exe name: %s", o.Program.General.ExeName)
 
 	processes, err := ps.Processes()
 	if err != nil {
@@ -117,20 +117,20 @@ func (o *Routine) checkGameRunning() error {
 		return nil
 	}
 
-	runningGame, err := newRunningProgramRoutine(o.Program, possiblePID, o.User32)
+	runningProgram, err := newRunningProgramRoutine(o.Program, possiblePID, o.User32)
 	if err != nil {
-		return fmt.Errorf("failed to create new running game routine - %w", err)
+		return fmt.Errorf("failed to create new running program routine - %w", err)
 	}
 
-	o.current = runningGame
+	o.current = runningProgram
 	if o.Notif != nil {
-		o.Notif.GameStarted(o.Program.General.ExeName)
+		o.Notif.ProgramStarted(o.Program.General.ExeName)
 	}
 
 	return nil
 }
 
-// TODO: make source file for running game stuff
+// TODO: make source file for running program stuff
 func newRunningProgramRoutine(program *appconfig.ProgramConfig, pid int, dll *user32util.User32DLL) (*runningProgramRoutine, error) {
 	proc, err := kiwi.GetProcessByPID(pid)
 	if err != nil {
@@ -204,7 +204,7 @@ func newRunningProgramRoutine(program *appconfig.ProgramConfig, pid int, dll *us
 	go func() {
 		_, err := process.Wait()
 		if err == nil {
-			err = gameExitedNormallyErr
+			err = programExitedNormallyErr
 		}
 
 		runningProgram.exited(err)

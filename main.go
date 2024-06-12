@@ -14,22 +14,12 @@ import (
 	"time"
 
 	"github.com/SeungKang/blaj/internal/appconfig"
-	"github.com/SeungKang/blaj/internal/gamectl"
+	"github.com/SeungKang/blaj/internal/progctl"
 	"github.com/getlantern/systray"
 	"github.com/stephen-fox/user32util"
 )
 
 const appName = "blaj"
-
-// systray icon
-// blue: if no games found
-// green: if at least one game found
-// red: if there is any errors
-
-// game icon
-// blue: if checking for game
-// green: if game found
-// red: if error
 
 var (
 	//go:embed icons/shark_red.ico
@@ -103,23 +93,23 @@ func (o *app) setError(err error) {
 
 func (o *app) loop(ctx context.Context) {
 	for {
-		gameCtx, cancelGameCtxFn := context.WithCancel(ctx)
-		defer cancelGameCtxFn()
+		programCtx, cancelProgramCtxFn := context.WithCancel(ctx)
+		defer cancelProgramCtxFn()
 
-		programUIs, gameErrors, err := startApp(gameCtx, o)
+		programUIs, programErrors, err := startApp(programCtx, o)
 		if err != nil {
-			goto onGameExit
+			goto onProgramExit
 		}
 
 		select {
 		case <-ctx.Done():
-		case err = <-gameErrors:
+		case err = <-programErrors:
 		}
 
-	onGameExit:
+	onProgramExit:
 		log.Printf("app loop error - %v", err)
 
-		cancelGameCtxFn()
+		cancelProgramCtxFn()
 
 		if err != nil {
 			o.setError(err)
@@ -172,7 +162,7 @@ type programUI struct {
 	errorSubMenu *systray.MenuItem
 }
 
-func (o *programUI) GameStarted(exename string) {
+func (o *programUI) ProgramStarted(exename string) {
 	log.Printf("connected to %s", exename)
 
 	o.app.setRunning()
@@ -183,7 +173,7 @@ func (o *programUI) GameStarted(exename string) {
 	o.errorMenu.Hide()
 }
 
-func (o *programUI) GameStopped(exename string, err error) {
+func (o *programUI) ProgramStopped(exename string, err error) {
 	log.Printf("disconnected from %s", exename)
 
 	if err != nil {
@@ -262,19 +252,19 @@ func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, err
 		return nil, nil, fmt.Errorf("no .conf files found in %s", configDir)
 	}
 
-	gameUIs := make([]*programUI, len(programConfigs))
+	programUIs := make([]*programUI, len(programConfigs))
 	programRoutinesExited := make(chan error, len(programConfigs))
 
 	for i, program := range programConfigs {
 		program := program
 
-		gameUIs[i] = newProgramUI(program, parent)
+		programUIs[i] = newProgramUI(program, parent)
 
 		// TODO: write function that creates and starts program routine
-		programRoutine := &gamectl.Routine{
+		programRoutine := &progctl.Routine{
 			Program: program,
 			User32:  user32,
-			Notif:   gameUIs[i],
+			Notif:   programUIs[i],
 		}
 
 		programRoutine.Start(ctx)
@@ -286,7 +276,7 @@ func startApp(ctx context.Context, parent *app) ([]*programUI, <-chan error, err
 		}()
 	}
 
-	return gameUIs, programRoutinesExited, nil
+	return programUIs, programRoutinesExited, nil
 }
 
 func newLogUI(menuItemName string) *logUI {

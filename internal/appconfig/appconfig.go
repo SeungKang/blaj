@@ -209,13 +209,6 @@ func keybindFromStr(keybindStr string) (byte, error) {
 	return keybindStr[0], nil
 }
 
-type Game struct {
-	ExeName      string
-	Disabled     bool
-	SaveRestores []SaveRestore
-	Writers      []Writer
-}
-
 type SaveRestore struct {
 	// TODO: make Pointers into a map
 	Pointers     []Pointer
