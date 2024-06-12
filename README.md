@@ -46,7 +46,7 @@ file to take effect
 
 ## Configuration File Example: Mirror's Edge
 
-Configuration file examples can be found in the
+More configuration file examples can be found in the
 [examples directory](https://github.com/SeungKang/blaj/tree/main/examples).
 
 ```ini
@@ -57,17 +57,16 @@ exeName = MirrorsEdge.exe
 disabled = false
 
 [SaveRestore]
-positionPointer_12 = 0x01C553D0 0xCC 0x1CC 0x2F8 0xE8
-averageSpeedPointer_4 = 0x01C553D0 0xCC 0x1CC 0x2F8 0x4B8
-xCamPointer_4 = 0x01C47590 0x70 0xF8
-yCamPointer_4 = 0x01C47590 0x70 0xF4
+xCoordPointer_4 = 0x01C553D0 0xCC 0x1CC 0x2F8 0xE8
+yCoordPointer_4 = 0x01C553D0 0xCC 0x1CC 0x2F8 0xEC
+zCoordPointer_4 = 0x01C553D0 0xCC 0x1CC 0x2F8 0xF0
 saveState = 4
 restoreState = 5
 
 [Writer]
-positionPointer = 0x01C553D0 0xCC 0x1CC 0x2F8 0xE8
-write = 00000000
-keybind = 5
+bagCountPointer = 0x01C55EA8 0x194 0x128 0x3C 0x11C 0x64 0x4C 0x7A4
+bagCountData = 0x00000000
+writeKeybind = 6
 ```
 
 # Configuration Sections
