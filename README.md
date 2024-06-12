@@ -1,3 +1,5 @@
+![shark_blue.ico](icons/shark_blue.ico)
+
 # blaj
 
 `blaj` is a tool for creating a programmable trainer for speedrunning games.
