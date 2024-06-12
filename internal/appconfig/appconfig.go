@@ -309,13 +309,13 @@ type Writer struct {
 
 func (o *Writer) RequiredParams() []string {
 	return []string{
-		"writekeybind",
+		"keybind",
 	}
 }
 
 func (o *Writer) OnParam(name string) (func(param *ini.Param) error, ini.SchemaRule) {
 	switch {
-	case "writekeybind" == name:
+	case "keybind" == name:
 		return func(param *ini.Param) error {
 			keybind, err := keybindFromStr(param.Value)
 			if err != nil {
