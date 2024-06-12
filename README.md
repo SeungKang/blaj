@@ -1,16 +1,17 @@
 # blaj
 
 `blaj` is a tool to manipulate memory in a target process. It can be used to
-save/restore a fixed size of memory using keybinds. It can also write a payload
+save/restore a chunk of memory using keybinds. It can also write data
 to a designated memory location, activated by a keybind.
 
-This was originally created as a programmable trainer for
-speedrunning games. For example, once the desired game state is found using
-a tool such as [Cheat Engine](https://www.cheatengine.org/), the user can use
-`blaj` to save different parts of a game's state and then restore them
-(e.g. save and restore the location of the player, so that they can teleport
-back to certain area). This can help gamers practice game skips in a more
-consistent and efficient manner.
+This was originally created as a programmable trainer for speedrunning games.
+For example, once the desired game state is found using a tool such as
+[Cheat Engine][cheat-engine], the user can use `blaj` to save different parts
+of a game's state and then restore them (e.g. save and restore the location of
+the player, so that they can teleport back to certain area). This can help
+gamers practice game skips in a more consistent and efficient manner.
+
+[cheat-engine]: https://www.cheatengine.org/
 
 ## Features
 
@@ -24,10 +25,9 @@ consistent and efficient manner.
 
 ## Getting Started
 
-blaj is configured using INI configuration files store in
+`blaj` is configured using INI configuration files store in
 `C:\Users\<your-user-name>\.blaj`. This simple text-based configuration file
-will make it easy to define save/restore functionality, backup, and share to
-others.
+makes it easy to define save/restore functionality, backup, and share to others.
 
 1. Start `blaj.exe`, this will create the configuration directory
    `C:\Users\<your-user-name>\.blaj`
@@ -46,8 +46,7 @@ file to take effect
 
 ## Configuration File Example: Mirror's Edge
 
-More configuration file examples can be found in the
-[examples directory](https://github.com/SeungKang/blaj/tree/main/examples).
+More configuration file examples can be found in the [examples directory](examples).
 
 ```ini
 # this is an example comment that blaj ignores :)
@@ -66,14 +65,12 @@ restoreState = 5
 [Writer]
 bagCountPointer = 0x01C55EA8 0x194 0x128 0x3C 0x11C 0x64 0x4C 0x7A4
 bagCountData = 0x00000000
-writeKeybind = 6
+keybind = 6
 ```
 
-# Configuration Sections
+## Configuration Syntax
 
-- **[[General]](https://github.com/SeungKang/blaj?tab=readme-ov-file#general)**
-- **[[SaveRestore]](https://github.com/SeungKang/blaj?tab=readme-ov-file#saverestore)**
-- **[[Writer]](https://github.com/SeungKang/blaj?tab=readme-ov-file#writer)**
+The following subsections document the configuration file syntax.
 
 ## [General]
 
@@ -103,14 +100,14 @@ a keybind is activated. For example, saving and restoring the player position
 in a game. This section is optional and can have multiple entries per
 configuration.
 
-### `Pointer_#`
+### `<nickname>Pointer_#`
 
 - Type: hexadecimal space delimited
 - Required: Yes
 
 The size and the location of the memory to save/restore.
 
-### Pointer_# Example
+### <nickname>Pointer_# Example
 
 ```
 xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
@@ -130,7 +127,7 @@ xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
 
 Can be prefixed with any name but must ends with `Pointer_#` where `#` is the
 number of bytes to save/restore (e.g. `xCamPointer_4 = 0x01C47590 0x70 0xF8`).
-You can specify more than one `Pointer_#` parameter in the `[SaveRestore]`
+You can specify multiple `<nickname>Pointer_#` parameters in the `[SaveRestore]`
 section.
 
 By default, the base address of the `exeName` will be used. To use a different
@@ -143,7 +140,10 @@ Cheat Engine pointers are expressed as a base address with a series of offsets.
 A pointer in the `blaj` configuration file can be defined by listing these
 offsets space delimited.
 
-![cheat_engine_pointer.gif](cheat_engine_pointer.gif)
+The following gif illustrates how to convert a Cheat Engine pointer into
+a pointer in the configuration file:
+
+![cheat_engine_pointer.gif](.doc-resources/cheat_engine_pointer.gif)
 
 ### `saveState` and `restoreState`
 
@@ -152,7 +152,7 @@ offsets space delimited.
 
 Set the keybind to save and to restore memory. (e.g. `saveState = 5` &
 `restoreState = 6`) Sets the save state keybind to the keyboard key `5` and the
-restore state keybind to the keyboard key '6'.
+restore state keybind to the keyboard key `6`.
 
 ## [Writer]
 
@@ -160,7 +160,7 @@ The [Writer] section defines to write hexadecimal data in the target process.
 For example, to set player position to a specific location.
 This section is optional and can have multiple entries per configuration.
 
-### `Pointer`
+### `<nickname>Pointer`
 
 - Type: hexadecimal space delimited
 - Required: Yes
@@ -171,16 +171,16 @@ with `Pointer` (e.g. `xCamPointer = 0x01C47590 0x70 0xF8`)
 This is a similar structure to the `Pointer_#` parameter in the `[SaveRestore]`
 section without the `_#`.
 
-### `Data`
+### `<nickname>Data`
 
 - Type: hexadecimal bytes
 - Required: Yes
 
 The hexadecimal bytes to write at the memory location defined by the Pointer.
 The parameter name must end with `Data` and be prefixed with the same prefix
-used by the Pointer (e.g. `xPositionPointer` and `xPositionData`)
+used by the Pointer (e.g. `xPositionPointer` and `xPositionData`).
 
-### `Keybind`
+### `keybind`
 
 - Type: character
 - Required: Yes
@@ -208,10 +208,9 @@ Actions.
 
 1. Install cosign https://docs.sigstore.dev/system_config/installation/
 2. Download `blaj.exe` and `cosign.bundle` from Releases
-3. Run the command below to verify
+3. Run the command below to verify. Note: Replace NAME-OF-RELEASE with the release # from GitHub.
 
 ```console
-# replace NAME-OF-RELEASE with the release # of the exe
 $ cosign verify-blob path/to/blaj.exe \
   --bundle path/to/cosign.bundle \
   --certificate-identity=https://github.com/SeungKang/blaj/.github/workflows/build.yaml@refs/tags/NAME-OF-RELEASE \
@@ -226,4 +225,6 @@ Verified OK
 
 ## Troubleshooting
 
-Logs are saved in the `.blaj` directory found in your home directory
+Logs are saved in the `.blaj` directory found in your home directory.
+Any errors encountered will appear in the systray menu `Error Logs` and change
+the icon red.
