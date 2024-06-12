@@ -1,15 +1,14 @@
 # blaj
 
-`blaj` is a tool to manipulate memory in a target process. It can be used to
-save/restore a chunk of memory using keybinds. It can also write data
-to a designated memory location, activated by a keybind.
+`blaj` is a tool for creating a programmable trainer for speedrunning games.
+It can be used to save/restore a chunk of memory using keybinds. It can also
+write data to a designated memory location, activated by a keybind.
 
-This was originally created as a programmable trainer for speedrunning games.
-For example, once the desired game state is found using a tool such as
-[Cheat Engine][cheat-engine], the user can use `blaj` to save different parts
-of a game's state and then restore them (e.g. save and restore the location of
-the player, so that they can teleport back to certain area). This can help
-gamers practice game skips in a more consistent and efficient manner.
+Once the desired game state is found using a tool such as [Cheat Engine][cheat-engine],
+the user can use `blaj` to save different parts of a game's state and then
+restore them (e.g. save and restore the location of the player, so that they can
+teleport back to certain area). This can help gamers practice game skips in
+a more consistent and efficient manner.
 
 [cheat-engine]: https://www.cheatengine.org/
 
