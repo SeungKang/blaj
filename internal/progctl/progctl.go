@@ -69,6 +69,8 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 		}
 	}()
 
+	log.Printf("checking for program running with exe name: %s", o.Program.General.ExeName)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -97,8 +99,6 @@ func (o *Routine) loopWithError(ctx context.Context) error {
 
 func (o *Routine) checkProgramRunning() error {
 	// TODO: logger to make prefix with exename
-	log.Printf("checking for program running with exe name: %s", o.Program.General.ExeName)
-
 	processes, err := ps.Processes()
 	if err != nil {
 		return fmt.Errorf("failed to get active processes - %w", err)
