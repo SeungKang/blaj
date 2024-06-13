@@ -142,8 +142,6 @@ func (o *General) OnParam(name string) (func(param *ini.Param) error, ini.Schema
 }
 
 func (o *General) Validate() error {
-	//TODO: check if required params are set
-
 	return nil
 }
 

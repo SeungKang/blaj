@@ -142,7 +142,6 @@ func (o *app) exit() {
 
 func newProgramUI(program *appconfig.ProgramConfig, parent *app) *programUI {
 	gui := &programUI{
-		// TODO: maybe use the INI header
 		app:         parent,
 		runningMenu: systray.AddMenuItem(program.General.ExeName, ""),
 		errorMenu:   systray.AddMenuItem(program.General.ExeName, ":c"),

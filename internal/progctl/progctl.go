@@ -378,7 +378,7 @@ func (o *runningProgramRoutine) saveState(name string, state *programState) erro
 
 	savedState, err := o.proc.ReadBytes(stateAddr, state.pointer.NBytes)
 	if err != nil {
-		// TODO update with INI name
+		// TODO: update with INI name
 		return fmt.Errorf("failed to read from %s at 0x%x - %w",
 			name, stateAddr, err)
 	}
@@ -462,7 +462,7 @@ func (o *runningProgramRoutine) write(pointer appconfig.WritePointer) error {
 
 	err = o.proc.WriteBytes(writeAddr, pointer.Data)
 	if err != nil {
-		// TODO update with INI name
+		// TODO: update with INI name
 		return fmt.Errorf("failed to write bytes at %s (0x%x) - %w",
 			pointer.Pointer.Name, writeAddr, err)
 	}
