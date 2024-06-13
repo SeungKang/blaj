@@ -207,11 +207,13 @@ Defender will probably flag and delete it. Refer to the
 
 ### Verification
 
-The executable file found under Releases was signed using Sigstore's `cosign`
+The executable file found under [Releases][releases] was signed using Sigstore's `cosign`
 tool. You can use `cosign` to verify the file's provenance, confirming it was
 built by GitHub Actions and hasn't been tampered with. Receiving a "Verified OK"
 output provides a cryptographic attestation that this file came from GitHub
 Actions.
+
+[releases]: https://github.com/SeungKang/blaj/releases
 
 1. Install cosign https://docs.sigstore.dev/system_config/installation/
 2. Download `blaj.exe` and `cosign.bundle` from Releases
@@ -235,3 +237,10 @@ Verified OK
 Logs are saved in the `.blaj` directory found in your home directory.
 Any errors encountered will appear in the systray menu `Error Logs` and change
 the icon red.
+
+## Thank you
+
+Thankles to [Stephan Fox](https://github.com/stephen-fox) for helping me
+so much with this project and being the best supporter I could ever ask for.
+Thank you also to heki for brainstorming with me, testing, and providing a bunch
+of the example configurations.
