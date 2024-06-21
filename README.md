@@ -16,7 +16,7 @@ a more consistent and efficient manner.
 
 ## Features
 
-- Save then restore values in target process memory
+- Save and restore values in target process memory
 - Write payload to target process memory using pointer and offsets
 - Trigger memory manipulation using keybinds (ideal for working with full screen
   applications like games)
@@ -26,13 +26,13 @@ a more consistent and efficient manner.
 
 ## Getting Started
 
-`blaj` is configured using INI configuration files store in
+`blaj` is configured using INI configuration files stored in
 `C:\Users\<your-user-name>\.blaj`. This simple text-based configuration file
-makes it easy to define save/restore functionality, backup, and share to others.
+format makes it easy to define functionality, backup, and share with others.
 
-1. Start `blaj.exe`, this will create the configuration directory
+1. Start `blaj.exe`, this will create the configuration directory at
    `C:\Users\<your-user-name>\.blaj`
-2. Create a file ending in `.conf` (example: `mirrorsedge.conf`) in the `.blaj`
+2. Create a file ending in `.conf` (example: `mirrors-edge.conf`) in the `.blaj`
    directory
 3. Create a `[General]` section on its own line
 4. Create a `exeName` parameter and make it equal to the name of the exe of the
@@ -73,7 +73,7 @@ keybind = 6
 
 The following subsections document the configuration file syntax.
 
-## [General]
+## `[General]`
 
 The [General] section defines the `exeName` and whether the configuration file
 is `disabled`. The section is required and there should be only one entry per
@@ -84,17 +84,16 @@ configuration.
 - Type: string
 - Required: Yes
 
-The exe name of the target process which is case-insensitive.
+The exe name of the target process (case-insensitive).
 
 ### `disabled`
 
 - Type: boolean (true or false)
 - Required: No
 
-Use to stop processing this config file. `blaj` will skip this exe. (Defaults
-to false)
+Set to `true` to skip this config file (Defaults to false)
 
-## [SaveRestore]
+## `[SaveRestore]`
 
 The [SaveRestore] section defines to save and restore chunks of memory when
 a keybind is activated. For example, saving and restoring the player position
@@ -106,33 +105,43 @@ configuration.
 - Type: hexadecimal space delimited
 - Required: Yes
 
-The size and the location of the memory to save/restore.
+The size and the location of the memory to save and restore.
 
-### <nickname>Pointer_# Example
+Here is an example:
 
-```
+```ini
 xCamPointer_4 = getGameData.dll 0x01C47590 0x70 0xF8
-|__||_____| |   |_____________| |________| |_______|
-|      |    |          |            |          |__ additional offsets to get to the memory location containing the value (optional)
-|      |    |          |            |
-|      |    |          |            |__ the offset from the module base address in hexidecimal (required)
-|      |    |          |
-|      |    |          |__ the module to use as the base address, default is the exeName (optional)
-|      |    |
-|      |    |__ indicates to save 4 bytes (32 bits) at the memory location specified by the right of the equal sign
-|      |
-|      |__ ending the name with "Pointer_#" lets the program know to parse the values on the right of the equal sign
-| 
-|___ custom name prefix
+#__||_____| |   |_____________| |________| |_______|
+# |     |   |          |            |          |__ additional offsets to get to
+# |     |   |          |            |              the memory location containing
+# |     |   |          |            |              the value (optional)
+# |     |   |          |            |
+# |     |   |          |            |__ the offset from the module
+# |     |   |          |                base address in hexidecimal
+# |     |   |          |                (required)
+# |     |   |          |
+# |     |   |          |__ the module to use as the
+# |     |   |              base address, default is
+# |     |   |              the exeName (optional)
+# |     |   |
+# |     |   |__ memory chunk size. this example
+# |     |       saves 4 bytes (32 bits) at the
+# |     |       memory location specified by the
+# |     |       right of the equals sign (required)
+# |     |
+# |     |__ required parameter suffix
+# |         identifying that this is
+# |         a Pointer parameter (required)
+# |
+# |___ custom name prefix (required)
 ```
 
-Can be prefixed with any name but must ends with `Pointer_#` where `#` is the
-number of bytes to save/restore (e.g. `xCamPointer_4 = 0x01C47590 0x70 0xF8`).
-You can specify multiple `<nickname>Pointer_#` parameters in the `[SaveRestore]`
-section.
+Can be prefixed with any name, but must end with `Pointer_#` where `#` is the
+number of bytes to save/restore (e.g. `xCamPointer_4`). You can specify multiple
+`<nickname>Pointer_#` parameters in the `[SaveRestore]` section.
 
 By default, the base address of the `exeName` will be used. To use a different
-module as the base address, the module's name can be included after the equal
+module as the base address, the module's name can be included after the equals
 sign.
 
 #### Implementing a Cheat Engine pointer
@@ -155,11 +164,11 @@ Set the keybind to save and to restore memory. (e.g. `saveState = 5` &
 `restoreState = 6`) Sets the save state keybind to the keyboard key `5` and the
 restore state keybind to the keyboard key `6`.
 
-## [Writer]
+## `[Writer]`
 
-The [Writer] section defines to write hexadecimal data in the target process.
-For example, to set player position to a specific location.
-This section is optional and can have multiple entries per configuration.
+The [Writer] section defines hex-encoded data to write to the target process
+(for example, to set player position to a specific location).
+This section is optional and can have multiple entries per configuration file.
 
 ### `<nickname>Pointer`
 
@@ -167,7 +176,7 @@ This section is optional and can have multiple entries per configuration.
 - Required: Yes
 
 The location in memory to write to. Can be prefixed with any name but must ends
-with `Pointer` (e.g. `xCamPointer = 0x01C47590 0x70 0xF8`)
+with `Pointer` (e.g. `PlayerLocationPointer = 0x01C47590 0x70 0xF8`)
 
 This is a similar structure to the `Pointer_#` parameter in the `[SaveRestore]`
 section without the `_#`.
@@ -199,8 +208,8 @@ to the keyboard key `p`.
 Download and run the `blaj.exe` file from the latest
 [Releases](https://github.com/SeungKang/blaj/releases).
 
-You may need to set an exclusion for the `blaj.exe` file, or else Windows
-Defender will probably flag and delete it. Refer to the
+You may need to create a Windows Defender exclusion for the `blaj.exe` file.
+Otherwise, Windows Defender will probably flag and delete it. Refer to the
 [Windows documentation][windows-exclusion] for more information.
 
 [windows-exclusion]: https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26
@@ -215,7 +224,7 @@ Actions.
 
 [releases]: https://github.com/SeungKang/blaj/releases
 
-1. Install cosign https://docs.sigstore.dev/system_config/installation/
+1. Install cosign (https://docs.sigstore.dev/system_config/installation/)
 2. Download `blaj.exe` and `cosign.bundle` from Releases
 3. Run the command below to verify. Note: Replace NAME-OF-RELEASE with the release # from GitHub.
 
@@ -223,7 +232,7 @@ Actions.
 $ cosign verify-blob path/to/blaj.exe \
   --bundle path/to/cosign.bundle \
   --certificate-identity=https://github.com/SeungKang/blaj/.github/workflows/build.yaml@refs/tags/NAME-OF-RELEASE \
-  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 ```
 
 When it completes you should receive the following output:
@@ -235,8 +244,8 @@ Verified OK
 ## Troubleshooting
 
 Logs are saved in the `.blaj` directory found in your home directory.
-Any errors encountered will appear in the systray menu `Error Logs` and change
-the icon red.
+Any errors encountered will appear in the systray menu `Error Logs` and
+will make the icon red.
 
 ## Thank you
 
