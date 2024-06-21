@@ -24,6 +24,48 @@ a more consistent and efficient manner.
   of `blaj` and the connected processes
 - Attach to multiple processes simultaneously
 
+## Requirements
+
+- `blaj` is made for Windows machines
+
+## Installation
+
+Download and run the `blaj.exe` file from the latest
+[Releases](https://github.com/SeungKang/blaj/releases).
+
+You may need to create a Windows Defender exclusion for the `blaj.exe` file.
+Otherwise, Windows Defender will probably flag and delete it. Refer to the
+[Windows documentation][windows-exclusion] for more information.
+
+[windows-exclusion]: https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26
+
+### Verification
+
+The executable file found under [Releases][releases] was signed using Sigstore's `cosign`
+tool. You can use `cosign` to verify the file's provenance, confirming it was
+built by GitHub Actions and hasn't been tampered with. Receiving a "Verified OK"
+output provides a cryptographic attestation that this file came from GitHub
+Actions.
+
+[releases]: https://github.com/SeungKang/blaj/releases
+
+1. Install cosign (https://docs.sigstore.dev/system_config/installation/)
+2. Download `blaj.exe` and `cosign.bundle` from Releases
+3. Run the command below to verify. Note: Replace NAME-OF-RELEASE with the release # from GitHub.
+
+```sh
+cosign verify-blob path/to/blaj.exe \
+  --bundle path/to/cosign.bundle \
+  --certificate-identity=https://github.com/SeungKang/blaj/.github/workflows/build.yaml@refs/tags/NAME-OF-RELEASE \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+```
+
+When it completes you should receive the following output:
+
+```console
+Verified OK
+```
+
 ## Getting Started
 
 `blaj` is configured using INI configuration files stored in
@@ -198,48 +240,6 @@ used by the Pointer (e.g. `xPositionPointer` and `xPositionData`).
 Set the keybind to write the payload to the memory location of the Pointer.
 Can be assigned to a single keyboard key (e.g. `keybind = p`) sets write keybind
 to the keyboard key `p`.
-
-## Requirements
-
-- `blaj` is made for Windows machines
-
-## Installation
-
-Download and run the `blaj.exe` file from the latest
-[Releases](https://github.com/SeungKang/blaj/releases).
-
-You may need to create a Windows Defender exclusion for the `blaj.exe` file.
-Otherwise, Windows Defender will probably flag and delete it. Refer to the
-[Windows documentation][windows-exclusion] for more information.
-
-[windows-exclusion]: https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26
-
-### Verification
-
-The executable file found under [Releases][releases] was signed using Sigstore's `cosign`
-tool. You can use `cosign` to verify the file's provenance, confirming it was
-built by GitHub Actions and hasn't been tampered with. Receiving a "Verified OK"
-output provides a cryptographic attestation that this file came from GitHub
-Actions.
-
-[releases]: https://github.com/SeungKang/blaj/releases
-
-1. Install cosign (https://docs.sigstore.dev/system_config/installation/)
-2. Download `blaj.exe` and `cosign.bundle` from Releases
-3. Run the command below to verify. Note: Replace NAME-OF-RELEASE with the release # from GitHub.
-
-```console
-$ cosign verify-blob path/to/blaj.exe \
-  --bundle path/to/cosign.bundle \
-  --certificate-identity=https://github.com/SeungKang/blaj/.github/workflows/build.yaml@refs/tags/NAME-OF-RELEASE \
-  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
-```
-
-When it completes you should receive the following output:
-
-```console
-Verified OK
-```
 
 ## Troubleshooting
 
