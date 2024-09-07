@@ -12,7 +12,7 @@ import (
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
-	pEnumProcessModules   = kernel32.NewProc("K32EnumProcessModules")
+	pEnumProcessModulesEx = kernel32.NewProc("K32EnumProcessModulesEx")
 	pGetModuleFileNameExW = kernel32.NewProc("K32GetModuleFileNameExW")
 	pGetModuleInformation = kernel32.NewProc("K32GetModuleInformation")
 )
@@ -40,7 +40,7 @@ type Module struct {
 func ProcessModules(processHandle syscall.Handle) ([]Module, error) {
 	// TODO: handle more than 1024 (lookup maximum file handles and use that)
 	moduleHandles := make([]syscall.Handle, 1024)
-	numModuleHandles, err := EnumProcessModules(processHandle, moduleHandles)
+	numModuleHandles, err := EnumProcessModulesEx(processHandle, moduleHandles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to enum process modules - %w", err)
 	}
@@ -83,15 +83,15 @@ func lookupModuleInfo(processHandle syscall.Handle, moduleHandle syscall.Handle)
 	}, nil
 }
 
-// TODO: investigate using EnumProcessModulesEx
-func EnumProcessModules(hProcess syscall.Handle, lphModule []syscall.Handle) (uintptr, error) {
+func EnumProcessModulesEx(hProcess syscall.Handle, lphModule []syscall.Handle) (uintptr, error) {
 	lpcbNeeded := uint32(0)
 
-	_, _, err := pEnumProcessModules.Call(
+	_, _, err := pEnumProcessModulesEx.Call(
 		uintptr(hProcess),
 		uintptr(unsafe.Pointer(&lphModule[0])),
 		uintptr(len(lphModule)),
-		uintptr(unsafe.Pointer(&lpcbNeeded)))
+		uintptr(unsafe.Pointer(&lpcbNeeded)),
+		uintptr(0x03)) // 0x03 lists all 32-bit and 64-bit modules
 	if err.(syscall.Errno) != 0 {
 		return 0, err
 	}
